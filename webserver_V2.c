@@ -46,6 +46,9 @@ The web server must satisfy the following requirements:
 void FillAddress(struct sockaddr_in *Address,int nHostPort);
 char* ReadFile(char* fileAddress,char* source);
 int CreateServerSocket(int *hServerSocket);
+char *substring(size_t start, size_t stop, const char *src, size_t size);
+
+
 
 
 int main(int argc, char **argv) {
@@ -135,30 +138,40 @@ int main(int argc, char **argv) {
 				printf("\nGot a connection");
 
 				//SEE IF CLIENT SENT A MESSAGE?
-				printf("\n\nDOES THIS LINE HIT???\n\n");
-				read(hSocket,pBuffer,BUFFER_SIZE);
-				if(pBuffer != NULL){
-			    printf("\nMessage from client.... \"%s\" to client",pBuffer);
+				char strGetFileRequest[100];
+				printf("\n\nI should be receiving a well formed Get File request.\n\n");
+				read(hSocket,strGetFileRequest,sizeof(strGetFileRequest));
+
+				if(strGetFileRequest != NULL){
+			    printf("\nReceieved \"%s\" from client", strGetFileRequest);
 				}
 				else{
-				printf("No message from client");
+				printf("No GetFile request from client");
 				}
 
-				//COPY MESSAGE INTO BUFFER...
-				//INSTEAD, LETS GET FILE AND WRITE INTO BUFFER?
+				//PARSE TARGET FROM GET FILE REQUEST...
+				//assume that "getFile GET " protocol means that file name will start from
+				// 13th character in string
+
+				char* strWorkLoadFileName = substring(12,100,strGetFileRequest,sizeof(strGetFileRequest));
+				printf("\nReceived work load file name (\"%s\")" ,strWorkLoadFileName);
+				//GET FILES AND PUT IN INTO BUFFER...
+
 				//CHOOSE STATIC FILE FOR NOW...
 				//MESSAGE IS CURRENTLY THE DEFAULT FROM SOURCE CODE. WE CAN RUN STRCPY AGAIN AND JUST OVERWRITE IT
-				//char source[1000000];
-				strcpy(pBuffer,MESSAGE);
-				//strcpy(pBuffer,ReadFile("1kb-sample-file-1.html",source));
-
-				printf("\nSending \"%s\" to client",pBuffer);
+				char source[1000000];
+				//strcpy(pBuffer,strWorkLoadFileName);
+				printf("\nCopy contents of workload file to buffer and send");
+				strcpy(pBuffer,ReadFile(strWorkLoadFileName,source));
+				printf("\nSending contents of file (\"%s\") to client",pBuffer);
 				/* number returned by read() and write() is the number of bytes
 				** read or written, with -1 being that an error occured
 				** write what we received back to the server */
 				write(hSocket,pBuffer,strlen(pBuffer)+1);
+
 				/* read from socket into buffer */
-				read(hSocket,pBuffer,BUFFER_SIZE);
+				//read(hSocket,pBuffer,BUFFER_SIZE);
+
 
 				//if(strcmp(pBuffer,MESSAGE) == 0)
 					//printf("\nThe messages match");
@@ -174,7 +187,6 @@ int main(int argc, char **argv) {
         		}
     }
 }
-
 
 void FillAddress(struct sockaddr_in *Address,int nHostPort) {
 	//FILL ADDRESS STRUCTURE
@@ -229,6 +241,17 @@ int CreateServerSocket(int *hServerSocket){
 		return 1;
 	}
 }
+char *substring(size_t start, size_t stop, const char *src, size_t size)
+{
+	//char dst[size];
+	char* dst = malloc(size * sizeof(char));
 
-
+	int count = stop - start;
+	if ( count >= --size )
+	{
+		count = size;
+	}
+	sprintf(dst, "%.*s", count, src + start);
+	return dst;
+}
 

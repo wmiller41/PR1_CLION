@@ -122,12 +122,15 @@ int main(int argc, char **argv) {
 
     // for loop begin
     //for each file to get
-        char* GET_FILE_REQUEST = "GETFILE X Y Z";
+        //spoof request now to fill out server logic
+        char* GET_FILE_REQUEST = "GetFile GET workload.txt";
+
         write(hSocket,GET_FILE_REQUEST,sizeof(GET_FILE_REQUEST)+100);
 
         nReadAmount=read(hSocket,pBuffer,BUFFER_SIZE);
 
         printf("\nReceived \"%s\" from server\n",pBuffer);
+        printf("\nRecieved amount is \"%d\" ", nReadAmount);
         printf("\nWriting \"%s\" to file....\n",pBuffer);
 
         //3.) write to directory from parameter
