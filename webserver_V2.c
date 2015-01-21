@@ -15,6 +15,7 @@
 
 
 
+
 //usage webserver[options]
 /*
 options:
@@ -44,7 +45,7 @@ The web server must satisfy the following requirements:
 
 
 void FillAddress(struct sockaddr_in *Address,int nHostPort);
-char* ReadFile(char* fileAddress,char* source);
+char* ReadFile(char* fileAddress);
 int CreateServerSocket(int *hServerSocket);
 char *substring(size_t start, size_t stop, const char *src, size_t size);
 
@@ -153,16 +154,15 @@ int main(int argc, char **argv) {
 				//assume that "getFile GET " protocol means that file name will start from
 				// 13th character in string
 
-				char* strWorkLoadFileName = substring(12,100,strGetFileRequest,sizeof(strGetFileRequest));
-				printf("\nReceived work load file name (\"%s\")" ,strWorkLoadFileName);
-				//GET FILES AND PUT IN INTO BUFFER...
+				char* strFileName = substring(13,100,strGetFileRequest,sizeof(strGetFileRequest));
+				printf("\nFile name is \"%s\"" ,strFileName);
+				//GET FILE AND PUT IN INTO BUFFER...
 
-				//CHOOSE STATIC FILE FOR NOW...
+
 				//MESSAGE IS CURRENTLY THE DEFAULT FROM SOURCE CODE. WE CAN RUN STRCPY AGAIN AND JUST OVERWRITE IT
-				char source[1000000];
 				//strcpy(pBuffer,strWorkLoadFileName);
-				printf("\nCopy contents of workload file to buffer and send");
-				strcpy(pBuffer,ReadFile(strWorkLoadFileName,source));
+				printf("\nCopy contents of file to buffer and send");
+				strcpy(pBuffer,ReadFile(strFileName));
 				printf("\nSending contents of file (\"%s\") to client",pBuffer);
 				/* number returned by read() and write() is the number of bytes
 				** read or written, with -1 being that an error occured
@@ -198,7 +198,7 @@ void FillAddress(struct sockaddr_in *Address,int nHostPort) {
 	Address->sin_family=AF_INET;
 	//ipv4
 }
-char* ReadFile(char* fileAddress,char* source){
+char* ReadFile(char* fileAddress){
 
 	char *buffer;
 	FILE *fh = fopen(fileAddress, "rb");
