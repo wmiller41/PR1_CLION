@@ -45,7 +45,7 @@ The web server must satisfy the following requirements:
 
 
 void FillAddress(struct sockaddr_in *Address,int nHostPort);
-char* ReadFile(char* fileAddress);
+char* ReadFile(char* fileAddress, long *fileSize);
 int CreateServerSocket(int *hServerSocket);
 char *substring(size_t start, size_t stop, const char *src, size_t size);
 
@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
 
 	for(;;)
 	{
-        printf("\nWaiting for a connection\n");
+        printf("\nWaiting for a connection");
         /* get the connected socket */
 
         hSocket=accept(hServerSocket,(struct sockaddr*)&Address,(socklen_t *)&nAddressSize);
@@ -139,9 +139,11 @@ int main(int argc, char **argv) {
 				printf("\nGot a connection");
 
 				//SEE IF CLIENT SENT A MESSAGE?
-				char strGetFileRequest[100];
-				printf("\n\nI should be receiving a well formed Get File request.\n\n");
-				read(hSocket,strGetFileRequest,sizeof(strGetFileRequest));
+				char* strGetFileRequest = malloc((256*(sizeof(char))));
+				printf("\nI should be receiving a well formed Get File request.\n");
+
+                //----#1------------RECEIVE GETFILE REQUEST--------------
+				read(hSocket,strGetFileRequest,(256*(sizeof(char))));
 
 				if(strGetFileRequest != NULL){
 			    printf("\nReceieved \"%s\" from client", strGetFileRequest);
@@ -150,41 +152,67 @@ int main(int argc, char **argv) {
 				printf("No GetFile request from client");
 				}
 
-				//PARSE TARGET FROM GET FILE REQUEST...
+                //GetFile STATUS filesize FILE
 				//assume that "getFile GET " protocol means that file name will start from
 				// 13th character in string
 
-				char* strFileName = substring(13,100,strGetFileRequest,sizeof(strGetFileRequest));
+                //---#2-----------PARSE GET FILE REQUEST, GET NAME-------
+                char* GET_FILE_RETURN = malloc((256*(sizeof(char))));
+				char* strFileName = substring(13,1000,strGetFileRequest,(256*sizeof(char)));
+
 				printf("\nFile name is \"%s\"" ,strFileName);
-				//GET FILE AND PUT IN INTO BUFFER...
+
+                //---#3-----------CHECK ON FILE--------------------------
+                // if strFileName is found, concat to GET_FILE RETURN
+                // else, return the file not found status and close up shop
+                if( access(strFileName, F_OK ) == -1 ) {
+                    // file doesn't exists
+                    strcat(GET_FILE_RETURN,"GetFile FILE_NOT_FOUND 0 0");
+                    write(hSocket,GET_FILE_RETURN,(256*(sizeof(char))));
+                    printf("\nClosing the socket");
+                    /* close socket */
+                    if(close(hSocket) == SOCKET_ERROR)
+                    {
+                        printf("\nCould not close socket\n");
+                        return 0;
+                    }
+                }
+                else {
+
+                    long FILE_SIZE;
+                    char* CHAR_FILE_SIZE = malloc((256*(sizeof(char))));
+                    sprintf(CHAR_FILE_SIZE,"%ld",FILE_SIZE);
 
 
-				//MESSAGE IS CURRENTLY THE DEFAULT FROM SOURCE CODE. WE CAN RUN STRCPY AGAIN AND JUST OVERWRITE IT
-				//strcpy(pBuffer,strWorkLoadFileName);
-				printf("\nCopy contents of file to buffer and send");
-				strcpy(pBuffer,ReadFile(strFileName));
-				printf("\nSending contents of file (\"%s\") to client",pBuffer);
-				/* number returned by read() and write() is the number of bytes
-				** read or written, with -1 being that an error occured
-				** write what we received back to the server */
-				write(hSocket,pBuffer,strlen(pBuffer)+1);
+                    //strcpy(pBuffer,strWorkLoadFileName);
+                    printf("\nReading file and getting file size\n");
+                    strcpy(pBuffer, ReadFile(strFileName,&FILE_SIZE));
+                    printf("Creating return GetFile request");
+                    strcat(GET_FILE_RETURN,"GetFile OK");
+                    //strcat(GET_FILE_RETURN,pBuffer);
 
-				/* read from socket into buffer */
-				//read(hSocket,pBuffer,BUFFER_SIZE);
+                    printf("\nReturning GetFile Response (\"%s\") to client\n",GET_FILE_RETURN);
+                    write(hSocket,GET_FILE_RETURN,(256*(sizeof(char))));
+                    printf("\nReturning File Size (\"%s\") to client\n",CHAR_FILE_SIZE);
+                    write(hSocket,CHAR_FILE_SIZE,(256*(sizeof(char))));
+                    //printf("\nReturning file in 1024 byte chunks...\"%s\"....file size is \"%s\"\n",strFileName,CHAR_FILE_SIZE);
 
 
-				//if(strcmp(pBuffer,MESSAGE) == 0)
-					//printf("\nThe messages match");
-				//else
-					//printf("\nSomething was changed in the message");
+                    //WRITE TO BUFFER IN LOOPS
 
-				printf("\nClosing the socket");
-				/* close socket */
-				if(close(hSocket) == SOCKET_ERROR)
-				{
-				 printf("\nCould not close socket\n");
-				return 0;
-        		}
+
+                    free(GET_FILE_RETURN);
+                    free(CHAR_FILE_SIZE);
+                    /* read from socket into buffer */
+                    //read(hSocket,pBuffer,BUFFER_SIZE);
+
+                    printf("\nClosing the socket\n\n");
+                    /* close socket */
+                    if (close(hSocket) == SOCKET_ERROR) {
+                        printf("\nCould not close socket\n");
+                        return 0;
+                    }
+                }
     }
 }
 
@@ -198,7 +226,7 @@ void FillAddress(struct sockaddr_in *Address,int nHostPort) {
 	Address->sin_family=AF_INET;
 	//ipv4
 }
-char* ReadFile(char* fileAddress){
+char* ReadFile(char* fileAddress, long *fileSize){
 
 	char *buffer;
 	FILE *fh = fopen(fileAddress, "rb");
@@ -206,7 +234,9 @@ char* ReadFile(char* fileAddress){
 	{
 		fseek(fh, 0L, SEEK_END);
 		long s = ftell(fh);
+        *fileSize = s;
 		rewind(fh);
+
 		buffer = malloc(s);
 		if ( buffer != NULL )
 		{

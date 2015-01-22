@@ -57,8 +57,8 @@ int main(int argc, char **argv) {
     struct hostent* pHostInfo;   /* holds info about a machine */
     struct sockaddr_in Address;  /* Internet socket address stuct */
     long nHostAddress;
-    char pBuffer[BUFFER_SIZE];
-    unsigned nReadAmount;
+    //char pBuffer[BUFFER_SIZE];
+    //unsigned nReadAmount;
     char strHostName[HOST_NAME_SIZE];
     int nHostPort;
 
@@ -77,23 +77,20 @@ int main(int argc, char **argv) {
     /*---TO DO---*/
 
     //1.) read workload file in
-    char* WORKLOAD_FILE_NAME = "workload.txt";
+    char* WORKLOAD_FILE_NAME = "workload-1.txt";
     char* WORKLOAD_FILE_CONTENTS = ReadFile(WORKLOAD_FILE_NAME);
-
 
     //2.) USE "GET FILE" protocol to request files
     // CLIENT SHOULD GENERATE A NUMBER OF "GETFILE" REQUESTS (eventually from different threads)
-
     //we should have a for loop...for each item in the array of files to retrieve...
     //create and send a proper "get file" request for each one and save it in the directory
 
-
         printf("\nWORKLOAD FILE CONTENTS \"%s\"",WORKLOAD_FILE_CONTENTS);
 
-        char** TARGET_FILE_POINTERS = malloc(1000000);
-        char* BYTES_OUT = malloc(1000000);
+        char** TARGET_FILE_POINTERS = malloc((256*(sizeof(char))));
+        char* BYTES_OUT = malloc((256*(sizeof(char))));
         int TARGET_FILES_SIZE = explode("\n",WORKLOAD_FILE_CONTENTS,TARGET_FILE_POINTERS,BYTES_OUT);
-        printf("\nTARGET FILE BYTES \"%s\",TARGET FILE SIZE \"%d\"",TARGET_FILE_POINTERS[3],TARGET_FILES_SIZE);
+        printf("\nTARGET FILE BYTES \"%s\",TARGET FILE SIZE \"%d\"\n\n",TARGET_FILE_POINTERS[3],TARGET_FILES_SIZE);
 
         // for loop begin
         //for each file to get
@@ -119,44 +116,71 @@ int main(int argc, char **argv) {
             /* fill address struct */
             Address.sin_addr.s_addr=nHostAddress;
             Address.sin_port=htons(nHostPort);
+            Address.sin_port=htons(nHostPort);
             Address.sin_family=AF_INET;
 
             printf("\nConnecting to %s on port %d",strHostName,nHostPort);
-            //sleep(10);
+
             /* connect to host */
-            if(connect(hSocket,(struct sockaddr*)&Address,sizeof(Address))
-                    == SOCKET_ERROR)
+            if(connect(hSocket,(struct sockaddr*)&Address,sizeof(Address)) == SOCKET_ERROR)
             {
                 printf("\nCould not connect to host\n");
                 return 0;
             }
 
-            //printf("\n FILE \"%d\" is called \"%s\"",i,TARGET_FILE_POINTERS[i]);
-            //char* GET_FILE_REQUEST = strncat("GetFile GET",TARGET_FILE_POINTERS[i],1000);
+            //long REQUESTED_FILE_SIZE;
+            char* GET_FILE_RESPONSE = malloc((256*(sizeof(char))));
+            char* GET_FILE_REQUEST = malloc((256*(sizeof(char))));
+            char* GET_FILE_TOTAL_SIZE = malloc((256*(sizeof(char))));
 
-            char GET_FILE_REQUEST[256]; //= "GetFile GET workload.txt";
+            //----#1------------FORM GETFILE REQUEST--------------
+
             strcpy(GET_FILE_REQUEST,"GetFile GET ");
             strcat(GET_FILE_REQUEST,TARGET_FILE_POINTERS[i]);
+            //char* GET_FILE_REQUEST = "GetFile GET workload.txt";
+            printf("\nFULL GET FILE REQUEST TO SEND: \"%s\"",GET_FILE_REQUEST);
 
-            printf("FULL GET FILE REQUEST TO SEND: \"%s\"",GET_FILE_REQUEST);
+            //----#2------------SEND GET FILE REQUEST----------------
+            write(hSocket,GET_FILE_REQUEST,(256*(sizeof(char))));
 
-            //SEND GET FILE REQUEST
-            write(hSocket,GET_FILE_REQUEST,sizeof(GET_FILE_REQUEST)+100);
+            sleep(.5);
+            //----#3------------READ GET FILE RESPONSE---------------
 
-            /* read from socket into buffer
-           ** number returned by read() and write() is the number of bytes
+           /* number returned by read() and write() is the number of bytes
            ** read or written, with -1 being that an error occured */
-            nReadAmount=read(hSocket,pBuffer,BUFFER_SIZE);
+            //GetFile STATUS filesize FILE
 
-            //NEED TO PARSE ACTUAL DATA FROM THE REQUEST RESPONSE...
+            read(hSocket,GET_FILE_RESPONSE,(256*(sizeof(char))));
+            printf("\nReceived \"%s\" from server\n",GET_FILE_RESPONSE);
+            //printf("\nReceived \"%d\" from server\n",nReadAmount);
 
-            printf("\nReceived \"%s\" from server\n",pBuffer);
-            printf("\nRecieved amount is \"%d\" ", nReadAmount);
-            printf("\nWriting \"%s\" to file....\n",pBuffer);
+            //----#4------------PARSE REQUEST STATUS-----------------
+            char* RESPONSE_STATUS = substring(14,2,GET_FILE_RESPONSE,10);
+            printf("\nStatus of response is  \"%s\", read amount \"%ld\"\n",RESPONSE_STATUS,sizeof(RESPONSE_STATUS));
+            if(strcmp(RESPONSE_STATUS,"OK") != 0)
+            {
+                printf("\nThere was an error!");
+                close(hSocket);
+                return 0;
+            }
+
+            //-----#5-----------READ FILE SIZE TO EXPECT--------------
+            read(hSocket,GET_FILE_TOTAL_SIZE,(256*(sizeof(char))));
+            printf("\n File to expect is size \"%s\"\n",GET_FILE_TOTAL_SIZE);
+
+
+
+            //READ BUFFER UNTIL EXPECTED SIZE HAS BEEN MET
+
+
+
+            //printf("\nReceived \"%s\" from server\n",pBuffer);
+            //printf("\nRecieved amount is \"%d\" ", nReadAmount);
+            //printf("\nWriting \"%s\" to file....\n",pBuffer);
 
             //3.) write to directory from parameter
             //write the file we recieved to buffer
-            WriteToFile(pBuffer);
+            //WriteToFile(pBuffer);
             //end the for loop
             printf("\nClosing socket\n");
             /* close socket */
@@ -166,7 +190,12 @@ int main(int argc, char **argv) {
                 return 0;
             }
 
+            free(GET_FILE_REQUEST);
+            free(GET_FILE_RESPONSE);
+            free(GET_FILE_TOTAL_SIZE);
+
         }
+
 
     free(BYTES_OUT);
     free(TARGET_FILE_POINTERS);
