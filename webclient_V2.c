@@ -141,21 +141,22 @@ int main(int argc, char **argv) {
             printf("\nFULL GET FILE REQUEST TO SEND: \"%s\"",GET_FILE_REQUEST);
 
             //----#2------------SEND GET FILE REQUEST----------------
-            write(hSocket,GET_FILE_REQUEST,(256*(sizeof(char))));
+            write(hSocket,GET_FILE_REQUEST,strlen(GET_FILE_REQUEST)+1);
 
-            sleep(.5);
-            //----#3------------READ GET FILE RESPONSE---------------
+            //----#3------------READ GET FILE RESPONSE/SIZE TO EXPECT---------------
 
            /* number returned by read() and write() is the number of bytes
            ** read or written, with -1 being that an error occured */
             //GetFile STATUS filesize FILE
 
-            read(hSocket,GET_FILE_RESPONSE,(256*(sizeof(char))));
+            read(hSocket,GET_FILE_RESPONSE,10);
+            read(hSocket,GET_FILE_TOTAL_SIZE,50);
             printf("\nReceived \"%s\" from server\n",GET_FILE_RESPONSE);
+            printf("\n File to expect is size \"%s\"\n",GET_FILE_TOTAL_SIZE);
             //printf("\nReceived \"%d\" from server\n",nReadAmount);
 
             //----#4------------PARSE REQUEST STATUS-----------------
-            char* RESPONSE_STATUS = substring(14,2,GET_FILE_RESPONSE,10);
+            char* RESPONSE_STATUS = substring(8,2,GET_FILE_RESPONSE,10);
             printf("\nStatus of response is  \"%s\", read amount \"%ld\"\n",RESPONSE_STATUS,sizeof(RESPONSE_STATUS));
             if(strcmp(RESPONSE_STATUS,"OK") != 0)
             {
@@ -163,12 +164,6 @@ int main(int argc, char **argv) {
                 close(hSocket);
                 return 0;
             }
-
-            //-----#5-----------READ FILE SIZE TO EXPECT--------------
-            read(hSocket,GET_FILE_TOTAL_SIZE,(256*(sizeof(char))));
-            printf("\n File to expect is size \"%s\"\n",GET_FILE_TOTAL_SIZE);
-
-
 
             //READ BUFFER UNTIL EXPECTED SIZE HAS BEEN MET
 

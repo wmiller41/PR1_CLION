@@ -139,11 +139,12 @@ int main(int argc, char **argv) {
 				printf("\nGot a connection");
 
 				//SEE IF CLIENT SENT A MESSAGE?
-				char* strGetFileRequest = malloc((256*(sizeof(char))));
+				char* strGetFileRequest = malloc(256*sizeof(char));
 				printf("\nI should be receiving a well formed Get File request.\n");
-
+                printf("size allocated for reading in is \"%ld\"",sizeof(strGetFileRequest));
                 //----#1------------RECEIVE GETFILE REQUEST--------------
-				read(hSocket,strGetFileRequest,(256*(sizeof(char))));
+				read(hSocket,strGetFileRequest,256*sizeof(char));
+                printf("size allocated for reading in is \"%ld\"",sizeof(strGetFileRequest));
 
 				if(strGetFileRequest != NULL){
 			    printf("\nReceieved \"%s\" from client", strGetFileRequest);
@@ -157,7 +158,7 @@ int main(int argc, char **argv) {
 				// 13th character in string
 
                 //---#2-----------PARSE GET FILE REQUEST, GET NAME-------
-                char* GET_FILE_RETURN = malloc((256*(sizeof(char))));
+                char* GET_FILE_RETURN = malloc(256*sizeof(char));
 				char* strFileName = substring(13,1000,strGetFileRequest,(256*sizeof(char)));
 
 				printf("\nFile name is \"%s\"" ,strFileName);
@@ -168,7 +169,7 @@ int main(int argc, char **argv) {
                 if( access(strFileName, F_OK ) == -1 ) {
                     // file doesn't exists
                     strcat(GET_FILE_RETURN,"GetFile FILE_NOT_FOUND 0 0");
-                    write(hSocket,GET_FILE_RETURN,(256*(sizeof(char))));
+                    write(hSocket,GET_FILE_RETURN,strlen(GET_FILE_RETURN)+1);
                     printf("\nClosing the socket");
                     /* close socket */
                     if(close(hSocket) == SOCKET_ERROR)
@@ -192,9 +193,10 @@ int main(int argc, char **argv) {
                     //strcat(GET_FILE_RETURN,pBuffer);
 
                     printf("\nReturning GetFile Response (\"%s\") to client\n",GET_FILE_RETURN);
-                    write(hSocket,GET_FILE_RETURN,(256*(sizeof(char))));
+                    write(hSocket,GET_FILE_RETURN,strlen(GET_FILE_RETURN)+1);
+
                     printf("\nReturning File Size (\"%s\") to client\n",CHAR_FILE_SIZE);
-                    write(hSocket,CHAR_FILE_SIZE,(256*(sizeof(char))));
+                    write(hSocket,CHAR_FILE_SIZE,strlen(CHAR_FILE_SIZE)+1);
                     //printf("\nReturning file in 1024 byte chunks...\"%s\"....file size is \"%s\"\n",strFileName,CHAR_FILE_SIZE);
 
 
