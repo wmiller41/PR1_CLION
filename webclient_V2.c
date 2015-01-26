@@ -108,7 +108,6 @@ int main(int argc, char **argv) {
                 printf("\nCould not make a socket\n");
                 return 0;
             }
-
             /* get IP address from name */
             pHostInfo=gethostbyname(strHostName);
             /* copy address into long */
@@ -133,12 +132,14 @@ int main(int argc, char **argv) {
             char* GET_FILE_RESPONSE = malloc((256*(sizeof(char))));
             char* GET_FILE_REQUEST = malloc((256*(sizeof(char))));
             char* GET_FILE_TOTAL_SIZE = malloc((256*(sizeof(char))));
+            // destination path
+            char* FULL_FILE_PATH = malloc(256);
 
             //----#1------------FORM GETFILE REQUEST--------------
             GET_FILE_REQUEST[0] = '\0';
             strcat(GET_FILE_REQUEST,"GetFile GET ");
+            //target file pointer is file name with \ attached
             strcat(GET_FILE_REQUEST,TARGET_FILE_POINTERS[i]);
-            //char* GET_FILE_REQUEST = "GetFile GET workload.txt";
             printf("\nFIRST FILE TO REQUEST: \"%s\"",TARGET_FILE_POINTERS[i]);
             printf("\nFULL GET FILE REQUEST TO SEND: \"%s\"",GET_FILE_REQUEST);
 
@@ -146,16 +147,13 @@ int main(int argc, char **argv) {
             write(hSocket,GET_FILE_REQUEST,256*sizeof(char));
 
             //----#3------------READ GET FILE RESPONSE/SIZE TO EXPECT---------------
-
-           /* number returned by read() and write() is the number of bytes
-           ** read or written, with -1 being that an error occured */
             //GetFile STATUS filesize FILE
-
+            //get response
             read(hSocket,GET_FILE_RESPONSE,256*(sizeof(char)));
+            // get file size
             read(hSocket,GET_FILE_TOTAL_SIZE,256*(sizeof(char)));
             printf("\nReceived \"%s\" from server\n",GET_FILE_RESPONSE);
             printf("\n File to expect is size \"%s\"\n",GET_FILE_TOTAL_SIZE);
-            //printf("\nReceived \"%d\" from server\n",nReadAmount);
 
             //----#4------------PARSE REQUEST STATUS-----------------
             char* RESPONSE_STATUS = substring(8,2,GET_FILE_RESPONSE,3);
@@ -167,41 +165,40 @@ int main(int argc, char **argv) {
                 return 0;
             }
 
+            //----#5------------CREATE DESTINATION PATH-------------
+            FULL_FILE_PATH[0] = '\0';
+            //place in folder
+            strcat(FULL_FILE_PATH,"PAYLOAD");
+            //file name already has /
+            strcat(FULL_FILE_PATH,TARGET_FILE_POINTERS[i]);
+            printf("Dest. final name is \"%s\" \n",FULL_FILE_PATH);
 
-            char* FullFilePath = malloc(256);
-            strcat(FullFilePath,"PAYLOAD");
-            strcat(FullFilePath,TARGET_FILE_POINTERS[i]);
-            printf("Dest. final name is \"%s\" \n", FullFilePath);
-
-            FILE *fp = fopen(FullFilePath, "ab");
+            FILE *fp = fopen(FULL_FILE_PATH, "ab");
             if(NULL == fp)
             {
                 printf("Error opening file");
                 return 1;
             }
 
-
-            //long FILE_SIZE = atol(GET_FILE_TOTAL_SIZE);
-            char* STORAGE_BUFFER = malloc(FILE_STORAGE_BUFFER_SIZE);
-
-            /* Receive data in chunks of BUF_SIZE bytes */
-
             int bytesReceived = 0;
             char buff[FILE_TRANSFER_BUFFER_SIZE];
             memset(buff, '0', sizeof(buff));
             while((bytesReceived = recv(hSocket, buff, 4,0)) > 0)
-
             {
-                printf("Bytes received %d\n",bytesReceived);
                 fwrite(buff,1,bytesReceived,fp);
+                if(bytesReceived % 100 == 0)
+                {
+                    printf("Bytes received %d\n",bytesReceived);
+                }
             }
-            if(bytesReceived <= 0)
+            if(bytesReceived < 0)
             {
                 printf("\n Read Error \n");
-                printf("Oh dear, something went wrong with read()!...Errno %d %s\n",errno,strerror(errno));
+                printf("Errno %d %s\n",errno,strerror(errno));
             }
 
-
+            //---------------CLOSE FILE---------
+            fclose(fp);
             //char log[256];
             //sprintf(log,"Writing to file \"%s\"\n",FullFilePath);
             //WriteToFile(log,"CLIENT-LOG.txt");
@@ -211,10 +208,6 @@ int main(int argc, char **argv) {
             //printf("\nRecieved amount is \"%d\" ", nReadAmount);
             //printf("\nWriting \"%s\" to file....\n",pBuffer);
 
-            //3.) write to directory from parameter
-            //write the file we recieved to buffer
-            //WriteToFile(pBuffer);
-            //end the for loop
             printf("\nClosing socket\n");
             /* close socket */
             if(close(hSocket) == SOCKET_ERROR)
@@ -223,30 +216,23 @@ int main(int argc, char **argv) {
                 return 0;
             }
 
-            fclose(fp);
 
-            free(FullFilePath);
-            free(STORAGE_BUFFER);
+
+
+            //---------------FREE POINTERS-----------
+            free(FULL_FILE_PATH);
             free(GET_FILE_REQUEST);
             free(GET_FILE_RESPONSE);
             free(GET_FILE_TOTAL_SIZE);
 
         }
-
-
     free(BYTES_OUT);
     free(TARGET_FILE_POINTERS);
-
-
-    /* write what we received back to the server */
-    //write(hSocket,pBuffer,nReadAmount);
-    //printf("\nWriting \"%s\" to server",pBuffer);
-
-
     return 0;
 }
 
 
+//-----------------HELPER METHODS----------------------
 void WriteToFile(char buffer[FILE_STORAGE_BUFFER_SIZE],char* filePath)
 {
     FILE *fptr;
