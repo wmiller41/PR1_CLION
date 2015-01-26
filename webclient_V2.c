@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
     /*---TO DO---*/
 
     //1.) read workload file in
-    char* WORKLOAD_FILE_NAME = "workload-1.txt";
+    char* WORKLOAD_FILE_NAME = "workload-2.txt";
     char* WORKLOAD_FILE_CONTENTS = ReadFile(WORKLOAD_FILE_NAME);
 
     //2.) USE "GET FILE" protocol to request files
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
         // for loop begin
         //for each file to get
         int i = 0;
-        for(i = 0; i < TARGET_FILES_SIZE ; i++)
+        for(i = 0; i < TARGET_FILES_SIZE; i++)
         {
 
             printf("\nMaking a socket");
@@ -134,14 +134,14 @@ int main(int argc, char **argv) {
             char* GET_FILE_TOTAL_SIZE = malloc((256*(sizeof(char))));
 
             //----#1------------FORM GETFILE REQUEST--------------
-
-            strcpy(GET_FILE_REQUEST,"GetFile GET ");
+            GET_FILE_REQUEST[0] = '\0';
+            strcat(GET_FILE_REQUEST,"GetFile GET ");
             strcat(GET_FILE_REQUEST,TARGET_FILE_POINTERS[i]);
             //char* GET_FILE_REQUEST = "GetFile GET workload.txt";
             printf("\nFULL GET FILE REQUEST TO SEND: \"%s\"",GET_FILE_REQUEST);
 
             //----#2------------SEND GET FILE REQUEST----------------
-            write(hSocket,GET_FILE_REQUEST,strlen(GET_FILE_REQUEST)+1);
+            write(hSocket,GET_FILE_REQUEST,256*sizeof(char));
 
             //----#3------------READ GET FILE RESPONSE/SIZE TO EXPECT---------------
 
@@ -149,14 +149,14 @@ int main(int argc, char **argv) {
            ** read or written, with -1 being that an error occured */
             //GetFile STATUS filesize FILE
 
-            read(hSocket,GET_FILE_RESPONSE,10);
-            read(hSocket,GET_FILE_TOTAL_SIZE,50);
+            read(hSocket,GET_FILE_RESPONSE,256*(sizeof(char)));
+            read(hSocket,GET_FILE_TOTAL_SIZE,256*(sizeof(char)));
             printf("\nReceived \"%s\" from server\n",GET_FILE_RESPONSE);
             printf("\n File to expect is size \"%s\"\n",GET_FILE_TOTAL_SIZE);
             //printf("\nReceived \"%d\" from server\n",nReadAmount);
 
             //----#4------------PARSE REQUEST STATUS-----------------
-            char* RESPONSE_STATUS = substring(8,2,GET_FILE_RESPONSE,10);
+            char* RESPONSE_STATUS = substring(8,2,GET_FILE_RESPONSE,3);
             printf("\nStatus of response is  \"%s\", read amount \"%ld\"\n",RESPONSE_STATUS,sizeof(RESPONSE_STATUS));
             if(strcmp(RESPONSE_STATUS,"OK") != 0)
             {

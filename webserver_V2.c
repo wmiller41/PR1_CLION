@@ -8,8 +8,9 @@
 #include <stdlib.h>
 
 
+
 #define SOCKET_ERROR -1
-#define BUFFER_SIZE 10000
+#define BUFFER_SIZE 15000000
 #define MESSAGE "If you see this, it's working!"
 #define QUEUE_SIZE 5
 
@@ -64,7 +65,7 @@ int main(int argc, char **argv) {
 	struct sockaddr_in Address;
 	int nAddressSize = sizeof(struct sockaddr_in);
 	//make this smaller?
-	char pBuffer[BUFFER_SIZE];
+
 	int nHostPort;
 
 	//--------GET PARAMETERS HERE-----
@@ -144,7 +145,6 @@ int main(int argc, char **argv) {
                 printf("size allocated for reading in is \"%ld\"",sizeof(strGetFileRequest));
                 //----#1------------RECEIVE GETFILE REQUEST--------------
 				read(hSocket,strGetFileRequest,256*sizeof(char));
-                printf("size allocated for reading in is \"%ld\"",sizeof(strGetFileRequest));
 
 				if(strGetFileRequest != NULL){
 			    printf("\nReceieved \"%s\" from client", strGetFileRequest);
@@ -169,8 +169,8 @@ int main(int argc, char **argv) {
                 if( access(strFileName, F_OK ) == -1 ) {
                     // file doesn't exists
                     strcat(GET_FILE_RETURN,"GetFile FILE_NOT_FOUND 0 0");
-                    write(hSocket,GET_FILE_RETURN,strlen(GET_FILE_RETURN)+1);
-                    printf("\nClosing the socket");
+                    write(hSocket,GET_FILE_RETURN,strlen(GET_FILE_RETURN));
+                    printf("\nFILE NOT FOUND....Closing the socket");
                     /* close socket */
                     if(close(hSocket) == SOCKET_ERROR)
                     {
@@ -181,30 +181,39 @@ int main(int argc, char **argv) {
                 else {
 
                     long FILE_SIZE;
+
+
+                    char* pBuffer = malloc(BUFFER_SIZE);
+                    //strcpy(pBuffer,strWorkLoadFileName);
+                    printf("\nReading file and getting file size\n");
+
+                    strcpy(pBuffer, ReadFile(strFileName,&FILE_SIZE));
+
+                    //TURN FILE SIZE INTO STRING
                     char* CHAR_FILE_SIZE = malloc((256*(sizeof(char))));
                     sprintf(CHAR_FILE_SIZE,"%ld",FILE_SIZE);
 
-
-                    //strcpy(pBuffer,strWorkLoadFileName);
-                    printf("\nReading file and getting file size\n");
-                    strcpy(pBuffer, ReadFile(strFileName,&FILE_SIZE));
                     printf("Creating return GetFile request");
+                    GET_FILE_RETURN[0] = '\0';
                     strcat(GET_FILE_RETURN,"GetFile OK");
+                    strcat(GET_FILE_RETURN,"\0");
                     //strcat(GET_FILE_RETURN,pBuffer);
 
                     printf("\nReturning GetFile Response (\"%s\") to client\n",GET_FILE_RETURN);
-                    write(hSocket,GET_FILE_RETURN,strlen(GET_FILE_RETURN)+1);
+                    write(hSocket,GET_FILE_RETURN,256*sizeof(char));
 
-                    printf("\nReturning File Size (\"%s\") to client\n",CHAR_FILE_SIZE);
-                    write(hSocket,CHAR_FILE_SIZE,strlen(CHAR_FILE_SIZE)+1);
+                    printf("\nReturning File Size Character(\"%s\") Long(\"%ld\") to client\n",CHAR_FILE_SIZE,FILE_SIZE);
+                    write(hSocket,CHAR_FILE_SIZE,256*sizeof(char));
                     //printf("\nReturning file in 1024 byte chunks...\"%s\"....file size is \"%s\"\n",strFileName,CHAR_FILE_SIZE);
 
 
                     //WRITE TO BUFFER IN LOOPS
 
 
+                    free(pBuffer);
                     free(GET_FILE_RETURN);
-                    free(CHAR_FILE_SIZE);
+                    free(strGetFileRequest);
+                    //free(CHAR_FILE_SIZE);
                     /* read from socket into buffer */
                     //read(hSocket,pBuffer,BUFFER_SIZE);
 
