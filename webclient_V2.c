@@ -7,12 +7,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
-
+#include <errno.h>
 
 
 
 #define SOCKET_ERROR        -1
-#define BUFFER_SIZE         100000
+#define FILE_STORAGE_BUFFER_SIZE 15000000
+#define FILE_TRANSFER_BUFFER_SIZE 2048
 #define HOST_NAME_SIZE      255
 
 /*
@@ -45,7 +46,7 @@ Must perform the above steps for a number of iterations specified by the Boss th
 */
 
 char* ReadFile(char* fileAddress);
-void WriteToFile(char buffer[BUFFER_SIZE]);
+void WriteToFile(char buffer[FILE_STORAGE_BUFFER_SIZE],char* filePath);
 char *substring(size_t start, size_t stop, const char *src, size_t size);
 size_t explode(const char *delim, const char *str,char **pointers_out, char *bytes_out);
 
@@ -57,7 +58,7 @@ int main(int argc, char **argv) {
     struct hostent* pHostInfo;   /* holds info about a machine */
     struct sockaddr_in Address;  /* Internet socket address stuct */
     long nHostAddress;
-    //char pBuffer[BUFFER_SIZE];
+    //char pBuffer[FILE_STORAGE_BUFFER_SIZE];
     //unsigned nReadAmount;
     char strHostName[HOST_NAME_SIZE];
     int nHostPort;
@@ -90,7 +91,7 @@ int main(int argc, char **argv) {
         char** TARGET_FILE_POINTERS = malloc((256*(sizeof(char))));
         char* BYTES_OUT = malloc((256*(sizeof(char))));
         int TARGET_FILES_SIZE = explode("\n",WORKLOAD_FILE_CONTENTS,TARGET_FILE_POINTERS,BYTES_OUT);
-        printf("\nTARGET FILE BYTES \"%s\",TARGET FILE SIZE \"%d\"\n\n",TARGET_FILE_POINTERS[3],TARGET_FILES_SIZE);
+        printf("Seperated workload into \"%d\" files",TARGET_FILES_SIZE);
 
         // for loop begin
         //for each file to get
@@ -138,6 +139,7 @@ int main(int argc, char **argv) {
             strcat(GET_FILE_REQUEST,"GetFile GET ");
             strcat(GET_FILE_REQUEST,TARGET_FILE_POINTERS[i]);
             //char* GET_FILE_REQUEST = "GetFile GET workload.txt";
+            printf("\nFIRST FILE TO REQUEST: \"%s\"",TARGET_FILE_POINTERS[i]);
             printf("\nFULL GET FILE REQUEST TO SEND: \"%s\"",GET_FILE_REQUEST);
 
             //----#2------------SEND GET FILE REQUEST----------------
@@ -165,9 +167,45 @@ int main(int argc, char **argv) {
                 return 0;
             }
 
-            //READ BUFFER UNTIL EXPECTED SIZE HAS BEEN MET
+
+            char* FullFilePath = malloc(256);
+            strcat(FullFilePath,"PAYLOAD");
+            strcat(FullFilePath,TARGET_FILE_POINTERS[i]);
+            printf("Dest. final name is \"%s\" \n", FullFilePath);
+
+            FILE *fp = fopen(FullFilePath, "ab");
+            if(NULL == fp)
+            {
+                printf("Error opening file");
+                return 1;
+            }
 
 
+            //long FILE_SIZE = atol(GET_FILE_TOTAL_SIZE);
+            char* STORAGE_BUFFER = malloc(FILE_STORAGE_BUFFER_SIZE);
+
+            /* Receive data in chunks of BUF_SIZE bytes */
+
+            int bytesReceived = 0;
+            char buff[FILE_TRANSFER_BUFFER_SIZE];
+            memset(buff, '0', sizeof(buff));
+            while((bytesReceived = recv(hSocket, buff, 4,0)) > 0)
+
+            {
+                printf("Bytes received %d\n",bytesReceived);
+                fwrite(buff,1,bytesReceived,fp);
+            }
+            if(bytesReceived <= 0)
+            {
+                printf("\n Read Error \n");
+                printf("Oh dear, something went wrong with read()!...Errno %d %s\n",errno,strerror(errno));
+            }
+
+
+            //char log[256];
+            //sprintf(log,"Writing to file \"%s\"\n",FullFilePath);
+            //WriteToFile(log,"CLIENT-LOG.txt");
+            //WriteToFile(STORAGE_BUFFER,FullFilePath);
 
             //printf("\nReceived \"%s\" from server\n",pBuffer);
             //printf("\nRecieved amount is \"%d\" ", nReadAmount);
@@ -185,6 +223,10 @@ int main(int argc, char **argv) {
                 return 0;
             }
 
+            fclose(fp);
+
+            free(FullFilePath);
+            free(STORAGE_BUFFER);
             free(GET_FILE_REQUEST);
             free(GET_FILE_RESPONSE);
             free(GET_FILE_TOTAL_SIZE);
@@ -205,10 +247,10 @@ int main(int argc, char **argv) {
 }
 
 
-void WriteToFile(char buffer[BUFFER_SIZE])
+void WriteToFile(char buffer[FILE_STORAGE_BUFFER_SIZE],char* filePath)
 {
     FILE *fptr;
-    char* filePath = "payload.txt";
+    //char* filePath = "payload.txt";
     fptr = fopen(filePath,"a+");
     fprintf(fptr,"%s",buffer);
     fclose(fptr);

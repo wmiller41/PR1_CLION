@@ -1,17 +1,20 @@
+
+#define __USE_LARGEFILE
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netdb.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <fcntl.h>
+#include <sys/sendfile.h>
+#include <errno.h>
 
 
 #define SOCKET_ERROR -1
-#define BUFFER_SIZE 15000000
-#define MESSAGE "If you see this, it's working!"
+#define FILE_STORAGE_BUFFER_SIZE 15000000
+#define FILE_TRANSFER_BUFFER_SIZE 2048
 #define QUEUE_SIZE 5
 
 
@@ -49,7 +52,7 @@ void FillAddress(struct sockaddr_in *Address,int nHostPort);
 char* ReadFile(char* fileAddress, long *fileSize);
 int CreateServerSocket(int *hServerSocket);
 char *substring(size_t start, size_t stop, const char *src, size_t size);
-
+void WriteToFile(char buffer[FILE_STORAGE_BUFFER_SIZE],char* filePath);
 
 
 
@@ -183,11 +186,11 @@ int main(int argc, char **argv) {
                     long FILE_SIZE;
 
 
-                    char* pBuffer = malloc(BUFFER_SIZE);
-                    //strcpy(pBuffer,strWorkLoadFileName);
+                    char* STORAGE_BUFFER = malloc(FILE_STORAGE_BUFFER_SIZE);
+                    //strcpy(STORAGE_BUFFER,strWorkLoadFileName);
                     printf("\nReading file and getting file size\n");
 
-                    strcpy(pBuffer, ReadFile(strFileName,&FILE_SIZE));
+                    strcpy(STORAGE_BUFFER, ReadFile(strFileName,&FILE_SIZE));
 
                     //TURN FILE SIZE INTO STRING
                     char* CHAR_FILE_SIZE = malloc((256*(sizeof(char))));
@@ -197,25 +200,66 @@ int main(int argc, char **argv) {
                     GET_FILE_RETURN[0] = '\0';
                     strcat(GET_FILE_RETURN,"GetFile OK");
                     strcat(GET_FILE_RETURN,"\0");
-                    //strcat(GET_FILE_RETURN,pBuffer);
+                    //strcat(GET_FILE_RETURN,STORAGE_BUFFER);
 
                     printf("\nReturning GetFile Response (\"%s\") to client\n",GET_FILE_RETURN);
                     write(hSocket,GET_FILE_RETURN,256*sizeof(char));
 
                     printf("\nReturning File Size Character(\"%s\") Long(\"%ld\") to client\n",CHAR_FILE_SIZE,FILE_SIZE);
                     write(hSocket,CHAR_FILE_SIZE,256*sizeof(char));
-                    //printf("\nReturning file in 1024 byte chunks...\"%s\"....file size is \"%s\"\n",strFileName,CHAR_FILE_SIZE);
+
+                    //SEND FILE
+                    int fd;
+                    //fd = open(strFileName,O_RDONLY);
+                    FILE *fp = fopen(strFileName, "r");
+                    fd = fileno(fp);
+
+                    printf("File Descriptor: %d \n", fd);
+                    if(fd < 0)
+                    {
+                        printf("ERROR OPENING FILE");
+                        return 0;
+                    }
+
+                    //off_t offset;
+                    int SIZE_SENT = 0;
+                    long FILE_REMAINING = FILE_SIZE;
+
+                    while(FILE_REMAINING >0)
+                    {
+                        printf("Sending file...");
+                        //SIZE_SENT = sendfile(hSocket, fd, &offset,256);
+                        SIZE_SENT = sendfile(hSocket, fd, NULL, FILE_SIZE);
+                        FILE_REMAINING -= SIZE_SENT;
+                        char log[300];
+                        sprintf(log,"%d sent, %ld remains\n", SIZE_SENT,FILE_REMAINING);
+                        WriteToFile(log,"SERVER-LOG.txt");
+                                printf("%d sent, %ld remains\n", SIZE_SENT,FILE_REMAINING);
+
+                        if(SIZE_SENT == -1)
+                       {
+                            printf("something went wrong with sendfile()!...Errno %d %s\n",errno,strerror(errno));
+                            fprintf(stderr, "error.. %d of %ld bytes sent\n", SIZE_SENT, FILE_SIZE);
+                            exit(1);
+                        }
+
+                    }
+
+                    if (SIZE_SENT != FILE_SIZE) {
+                        fprintf(stderr, "incomplete transfer from sendfile: %d of %ld bytes\n", SIZE_SENT, FILE_SIZE);
+                        exit(1);
+                    }
 
 
-                    //WRITE TO BUFFER IN LOOPS
+                    fclose(fp);
 
 
-                    free(pBuffer);
+                    free(STORAGE_BUFFER);
                     free(GET_FILE_RETURN);
                     free(strGetFileRequest);
                     //free(CHAR_FILE_SIZE);
                     /* read from socket into buffer */
-                    //read(hSocket,pBuffer,BUFFER_SIZE);
+                    //read(hSocket,STORAGE_BUFFER,FILE_STORAGE_BUFFER_SIZE);
 
                     printf("\nClosing the socket\n\n");
                     /* close socket */
@@ -295,4 +339,11 @@ char *substring(size_t start, size_t stop, const char *src, size_t size)
 	sprintf(dst, "%.*s", count, src + start);
 	return dst;
 }
-
+void WriteToFile(char buffer[FILE_STORAGE_BUFFER_SIZE],char* filePath)
+{
+    FILE *fptr;
+    //char* filePath = "payload.txt";
+    fptr = fopen(filePath,"a+");
+    fprintf(fptr,"%s",buffer);
+    fclose(fptr);
+}
