@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
         /*---TO DO---*/
 
         //1.) read workload file in
-        char *WORKLOAD_FILE_NAME = "workload-2.txt";
+        char *WORKLOAD_FILE_NAME = "workload-0.txt";
         char *WORKLOAD_FILE_CONTENTS = ReadFile(WORKLOAD_FILE_NAME);
 
         //2.) USE "GET FILE" protocol to request files
@@ -106,6 +106,8 @@ int main(int argc, char **argv) {
 
         //------------------------THREAD DATA--------------------------
         // one thread per file for now
+
+        //-------POOL OF THREADS-------
         int NUM_THREADS = TARGET_FILES_SIZE;
         pthread_t threads[NUM_THREADS];
 
@@ -140,12 +142,15 @@ int main(int argc, char **argv) {
 
                 //-----------------END SOCKET STUFF-------------------------
 
-                //-----------------THIS IS WHERE THREADS ARE MADE-------------------------
-
                 //-----------------THREAD STUFF-----------------
 
                 int rc;
                 long t = i;
+
+
+
+                //maybe instead of sending a single structure we sohuld send a queue of structures...
+                //more effecienit than constantly sending structures
 
                 //-----CREATE PARAMS FOR THREAD-----
                 struct worker_args_struct thread_args;
@@ -163,14 +168,6 @@ int main(int argc, char **argv) {
                     printf("\nERROR; return code from pthread_create() is %d\n", rc);
                     exit(-1);
                 }
-
-                // Wait on workers to finish
-
-                //int status = DoWork(TARGET_FILE_POINTERS[i],hSocket);
-                //if(status == 1) {
-                //    return status;
-                //}
-                //}
         }
 
         int iter;
@@ -213,6 +210,10 @@ int main(int argc, char **argv) {
                 printf("\nFULL GET FILE REQUEST TO SEND: \"%s\"", GET_FILE_REQUEST);
 
                 //----#2------------SEND GET FILE REQUEST----------------
+
+
+                //SLEEP FOR 4 SECONDS TO ALLOW SERVER TO BE READY???
+
                 write(hSocket, GET_FILE_REQUEST, 256 * sizeof(char));
 
                 //----#3------------READ GET FILE RESPONSE/SIZE TO EXPECT---------------
