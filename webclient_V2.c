@@ -86,18 +86,19 @@ int main(int argc, char **argv) {
     //we should have a for loop...for each item in the array of files to retrieve...
     //create and send a proper "get file" request for each one and save it in the directory
 
-        printf("\nWORKLOAD FILE CONTENTS \"%s\"",WORKLOAD_FILE_CONTENTS);
+    printf("\nWORKLOAD FILE CONTENTS \"%s\"",WORKLOAD_FILE_CONTENTS);
 
-        char** TARGET_FILE_POINTERS = malloc((256*(sizeof(char))));
-        char* BYTES_OUT = malloc((256*(sizeof(char))));
-        int TARGET_FILES_SIZE = explode("\n",WORKLOAD_FILE_CONTENTS,TARGET_FILE_POINTERS,BYTES_OUT);
-        printf("Seperated workload into \"%d\" files",TARGET_FILES_SIZE);
+    char** TARGET_FILE_POINTERS = malloc((256*(sizeof(char))));
+    char* BYTES_OUT = malloc((256*(sizeof(char))));
+    int TARGET_FILES_SIZE = explode("\n",WORKLOAD_FILE_CONTENTS,TARGET_FILE_POINTERS,BYTES_OUT);
+    printf("Seperated workload into \"%d\" files",TARGET_FILES_SIZE);
 
-        // for loop begin
-        //for each file to get
-        int i = 0;
-        for(i = 0; i < TARGET_FILES_SIZE; i++)
-        {
+    // for loop begin
+    //for each file to get
+    int i = 0;
+    for(i = 0; i < TARGET_FILES_SIZE; i++)
+    {
+
 
             printf("\nMaking a socket");
             /* make a socket */
@@ -128,6 +129,10 @@ int main(int argc, char **argv) {
                 return 0;
             }
 
+
+
+
+
             //long REQUESTED_FILE_SIZE;
             char* GET_FILE_RESPONSE = malloc((256*(sizeof(char))));
             char* GET_FILE_REQUEST = malloc((256*(sizeof(char))));
@@ -140,6 +145,7 @@ int main(int argc, char **argv) {
             strcat(GET_FILE_REQUEST,"GetFile GET ");
             //target file pointer is file name with \ attached
             strcat(GET_FILE_REQUEST,TARGET_FILE_POINTERS[i]);
+            strcat(GET_FILE_REQUEST,"\0");
             printf("\nFIRST FILE TO REQUEST: \"%s\"",TARGET_FILE_POINTERS[i]);
             printf("\nFULL GET FILE REQUEST TO SEND: \"%s\"",GET_FILE_REQUEST);
 
