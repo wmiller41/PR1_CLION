@@ -1,0 +1,195 @@
+
+Foreword
+Requirements
+System Requirements
+Server Requirements
+Server Command-Line API
+Client Requirements
+Client Command-Line API
+GetFile Protocol
+Makefile Standard
+References
+Sample Source Code
+Project Skeleton
+Project Design Recommendations
+Example Client
+General References
+Rubric
+Server (50 points)
+Client (50 points)
+Submission Instructions
+Questions
+
+Foreword
+In this project, you will design and implement a multi-threaded web server that serves static files based on a GetFile protocol. Alongside the server, you will also create a multi-threaded client that acts as a load generator for the server. Both the server and client should be written in C and be based on a sound, scalable design.
+Requirements
+System Requirements
+Your project must at least build and execute on the Ubuntu 14.04 (64-bit) VM that is provided for this course.
+Server Requirements
+The web server must satisfy the following requirements:
+Must be implemented using the Boss-Worker thread pattern
+Must spawn a pool of worker threads which will handle GetFile requests
+Must have a queue mechanism for communication between the boss and worker threads
+Must serve files from a file directory (path) provided as a command line argument
+If no path is specified, then the files should be served from the directory local to the server executable
+The boss thread must satisfy the following requirements:
+Must create a socket that listens for client connections/requests
+The worker threads must satisfy the following requirements:
+Must receive a client GetFile request, and then process it
+Must form and send a proper GetFile response to client
+See the GetFile Protocol below for information about forming proper responses
+Must close client connection
+Server Command-Line API
+For each command-line argument a default value and range of possible values is given, where applicable. If an argument is not provided, it is assumed that the default value will be used. The number of worker threads will be varied by graders such that a single thread, some low number of threads, some medium number of threads, and some large number of threads are tested -- whatever the case, a discrete number will be tested that falls within the range listed below.
+
+
+	usage:
+webserver [options]
+options:
+-p port (Default: 8888)
+-t number of worker threads (Default: 1, Range: 1-1000)
+-f path to static files (Default: .)
+-h show help message
+
+Client Requirements
+The client must satisfy the following requirements:
+Must be implemented using the Boss-Worker thread pattern
+Must spawn a pool of worker threads which will make GetFile requests
+Must have a queue mechanism for communication between the boss and worker threads
+Must create a workload for the server
+Must collect and compute the following metrics and write them to a file
+Total bytes received units here [B]
+Average response time units here [s]
+Average throughput [B/s]
+The client must generate a workload as follows:
+The client must generate a total number of requests (R)
+R should be uniformly distributed all worker threads (T) such that each worker performs approximately R/T requests
+The client must request files specified in a workflow file
+The workflow file must contain 1 or more filenames (ex: /myfile.html)
+The workflow file must support up to 100 unique filenames
+Filenames will be no longer than 200 characters
+Each filename should be on a separate line
+For each request, filenames will be assigned to the worker, either randomly or in a round robin manner.
+The worker threads must satisfy the following requirements:
+Must create socket and connect to an accepting server
+Must send request, receive response, and then close connection with the server
+If a download directory is specified at the command line, then the worker must take the response (file) and write the file to the download directory
+If the download directory is specified as null, then the response data may be discarded
+Must perform the above steps for a number of iterations specified by the Boss thread
+Must communicate metrics back to Boss thread
+Client Command-Line API
+For each command-line argument a default value and range of possible values is given, where applicable. If an argument is not provided, it is assumed that the default value will be used. The number of worker threads will be varied by graders such that a single thread, some low number of threads, and some larger number of threads are tested. Also, the number of requests will be varied. For either argument, there will be a discrete number of tests where those arguments fall within the ranges listed below.
+
+
+	usage:
+webclient [options]
+options:
+-s server address (Default: 0.0.0.0)
+-p server port (Default: 8888)
+-t number of worker threads (Default: 1, Range: 1-100)
+-w path to workload file (Default: workload.txt)
+-d path to downloaded file directory (Default: null)
+-r number of total requests (Default: 10, Range: 1-1000)
+-m path to metrics file (Default: metrics.txt)
+-h show help message
+
+GetFile Protocol
+All GetFile requests should be terminated with the null character ‘\0’.
+The GetFile client requests have the following format:
+
+
+	GetFile GET filename
+
+
+filename should be a file path (ex. /myfile.html)
+
+
+The GetFile server responses have the following format:
+
+
+	GetFile STATUS filesize file
+
+
+STATUS should either be OK or FILE_NOT_FOUND
+If STATUS is OK
+filesize corresponds to the number of bytes in the file (64-bit signed int) 
+filesize should be an ASCII representation (string) of the decimal integer number of bytes in the file
+file is the file's byte stream
+If STATUS is FILE_NOT_FOUND
+filesize is 0
+file is 0 (equivalent to \0 or NULL)
+Makefile Standard
+Your project should consist of a single Makefile that minimally supports the commands  make clean,  make webserver, and  make webclient. This will allow graders to quickly build and run your project submission.
+References
+Sample Source Code
+Server Example
+Client Example
+Project Skeleton
+We have provided a skeleton project that contains an appropriate Makefile, example workload files, and example media files -- Project 1 Skeleton
+Project Design Recommendations
+The following is a list of recommendations that can help you design your project:
+Implement a single-threaded client and server that communicate using sockets (sometimes referred to as an EchoClient and EchoServer)
+Implement a single-threaded client and server that communicate using sockets and the GetFile protocol
+You will need various-sized files for your implementation, so we have provided them in the Project 1 Skeleton!
+Implement a multi-threaded "Hello World" application using the boss-worker pattern
+Implement a multi-threaded "Hello World from X" application using the boss-worker pattern
+X is a value passed from the boss to a worker via a queue-based communication method
+Implement a multi-threaded GetFile client where each worker sends a number of file requests
+The boss statically assigns a number of requests and filename(s) to each worker
+Test with your single-threaded GetFile server with low loads
+Implement a multi-threaded GetFile server
+The boss communicates to workers via the socket ids returned from accept() via the shared queue
+Example Client
+We have provided working client executables for you to use for testing -- Project 1 Example Client and Project 1 Example Client (Works on VM). You will still be required to design your own client for this project; however, this is a good point of reference for your own design.
+General References
+POSIX Threads (PThreads)
+Linux Sockets Tutorial
+Practical TCP/IP Sockets in C
+Guide to Network Programming
+The GNU C Library - Date and Time
+Rubric
+Server (50 points)
+Implementation
+Does not crash
+Files fully transmitted
+Basic safety checks
+Use of sockets
+Multithreading
+Can vary number of threads
+Threads running concurrently and not serialized
+Synchronization
+Use of locks to access shared state
+No race conditions
+Client (50 points)
+Implementation
+Does not crash
+Files fully transmitted
+Basic safety checks
+Use of sockets
+Multithreading
+More than 1 thread is running concurrently and generating concurrent requests
+Synchronization
+Use of locks to access shared state
+No race conditions
+Metrics
+Correctness of timing and performance metrics
+Submission Instructions
+Please submit your project through T-Square as a .zip file. It should contain the following items:
+Makefile (targets for server and client)
+Your Makefile must conform to the standard mentioned in the Requirements
+Your executables must conform to the command-line API mentioned in the Requirements
+A README file describing all project files
+All source code
+
+NOTE: Your project will be graded using our workload and resource files (see Requirements), so you do not have to include them in your submission!
+
+Your .zip file should look as follows:
+
+zip-file/
+└── lastname-firstname-pr1
+    ├── Makefile
+    ├── README
+    └── [all source code]
+
+Questions
+For all questions, please use the class forum so that TA's and other students can assist you.
