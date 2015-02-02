@@ -11,6 +11,8 @@
 #include <pthread.h>
 #include <time.h>
 
+
+
 #define SOCKET_ERROR        -1
 #define FILE_STORAGE_BUFFER_SIZE 15000000
 #define FILE_TRANSFER_BUFFER_SIZE 2048
@@ -55,17 +57,34 @@ size_t explode(const char *delim, const char *str,char **pointers_out, char *byt
 //int DoWork(char *FILE_NAME, int hSocket);
 void *DoWorkThread(void* THREAD_ARGS);
 
-struct worker_args_struct {
-    char* file_name;
-    int hsocket;
+//struct worker_args_struct {
+    //char* file_name;
+    //int thread_id;
+    //char* download_directory;
+    //int file_paths_size;
+    //char** file_paths;
+//};
+
+struct worker_args_struct2 {
+    //char* file_name;
     int thread_id;
-    char* full_file_path;
+    char* download_directory;
+    int file_paths_size;
+    char* file_paths[1024];
 };
 
 
+struct metrics{
+    float bytes_sent;
+    int total_msec;
+    int finished_files;
+    int t_start;
+    int t_end;
+
+};
 
 
-
+struct metrics global_metrics;
 
 pthread_t threads[100];
 
@@ -89,18 +108,17 @@ struct client_params{
 };
 
 struct client_params PARAMETERS;
-
 struct client_params get_parameters(int num_args, char** arguments);
-
 struct client_params get_parameters(int num_args, char** arguments){
 
 
     struct client_params RETURN_PARAMS;
     RETURN_PARAMS.PARAM_PORT = 8888;
-    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 1;
+    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 4;
     RETURN_PARAMS.PARAM_SERVER_ADDRESS = "0.0.0.0";
-    RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = "workload.txt";
-    RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = 10;
+    RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = "workload-1.txt";
+    RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = 12;
+    RETURN_PARAMS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY = "PAYLOAD";
 
 
     int c;
@@ -142,32 +160,40 @@ struct client_params get_parameters(int num_args, char** arguments){
 
 }
 
-
+char strHostName[HOST_NAME_SIZE];
+int nHostPort;
+int NUM_REQUESTS;
+char *WORKLOAD_FILE_NAME;
+char *FILE_NAME;
+char *DOWNLOAD_DIRECTORY;
+int NUM_WORKER_THREADS;
 
 int main(int argc, char **argv) {
+
+        clock_t start,end;
+
+
+        global_metrics.bytes_sent = 0;
+        global_metrics.finished_files = 0;
+        global_metrics.total_msec = 0;
+        global_metrics.t_start = 0;
+        global_metrics.t_end = 0;
+
+
+
+
+        DOWNLOAD_DIRECTORY = malloc(256 * sizeof(char));
+
         printf("------WEB CLIENT STARTED-----\n");
 
-
-        int hSocket;                 /* handle to socket */
-        struct hostent *pHostInfo;   /* holds info about a machine */
-        struct sockaddr_in Address;  /* Internet socket address stuct */
-        long nHostAddress;
-        //char pBuffer[FILE_STORAGE_BUFFER_SIZE];
-        //unsigned nReadAmount;
-        char strHostName[HOST_NAME_SIZE];
-        int nHostPort;
-        int NUM_REQUESTS;
-        char *WORKLOAD_FILE_NAME;
-        char *FULL_FILE_PATH = malloc(256);
-        //int NUM_WORKER_THREADS;
-        FULL_FILE_PATH[0] = '\0';
+        DOWNLOAD_DIRECTORY[0] = '\0';
         //place in folder
 
-        if (argc < 3) {
-            printf("\nUsage: client host-name host-port\n");
-            return 0;
-        }
-        else {
+        //if (argc < 3) {
+            //printf("\nUsage: client host-name host-port\n");
+            //return 0;
+        //}
+        //else {
             // get parameters
             PARAMETERS = get_parameters(argc,argv);
             // assign parameters
@@ -175,9 +201,10 @@ int main(int argc, char **argv) {
             nHostPort = PARAMETERS.PARAM_PORT;
             WORKLOAD_FILE_NAME = PARAMETERS.PARAM_PATH_TO_WORKLOAD_FILE;
             NUM_REQUESTS = PARAMETERS.PARAM_NUM_OF_REQUESTS;
-            strcat(FULL_FILE_PATH,PARAMETERS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY);
-            //NUM_WORKER_THREADS = PARAMETERS.PARAM_NUM_WORKER_THREADS;
-        }
+            DOWNLOAD_DIRECTORY = PARAMETERS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY;
+            NUM_WORKER_THREADS = PARAMETERS.PARAM_NUM_WORKER_THREADS;
+            printf("NUM WORKER THREADS %d \n",NUM_WORKER_THREADS);
+       // }
 
 
         /*---TO DO---*/
@@ -192,201 +219,280 @@ int main(int argc, char **argv) {
         //create and send a proper "get file" request for each one and save it in the directory
 
 
-        //------------------------WORKLOAD FILE DATA-------------------
-        printf("\nWORKLOAD FILE CONTENTS \"%s\"", WORKLOAD_FILE_CONTENTS);
+        //------------------------WORKLOAD FILE DATA--------------------------
+        printf("\nWORKLOAD FILE CONTENTS \"%s\"\n", WORKLOAD_FILE_CONTENTS);
         char **TARGET_FILE_POINTERS = malloc((256 * (sizeof(char))));
         char *BYTES_OUT = malloc((256 * (sizeof(char))));
         int TARGET_FILES_SIZE = explode("\n", WORKLOAD_FILE_CONTENTS, TARGET_FILE_POINTERS, BYTES_OUT);
-        printf("Seperated workload into \"%d\" files", TARGET_FILES_SIZE);
+        printf("Seperated workload into \"%d\" files\n", TARGET_FILES_SIZE);
+
+        free(WORKLOAD_FILE_CONTENTS);
+        //------------1 per worker--------
+
+        struct worker_args_struct2 MASTER_ARGS_ARRAY[NUM_WORKER_THREADS];
+        //struct worker_args_struct MASTER_ARGS_ARRAY = malloc(sizeof(struct worker_args_struct)*NUM_WORKER_THREADS);
+        //------------ALLOCATE MEMORY FOR WORKER_ARGS PARAMETER STRUCTURE-----
 
 
-        //------------------------THREAD DATA--------------------------
-        // one thread per file for now
 
-        //-------POOL OF THREADS-------
-
-        //for loop begin
-        //for each file to get
         int i = 0;
-        for (i = 0; i < NUM_REQUESTS; i++) {
+        //int y = 0;
+        //for (i = 0; i < NUM_WORKER_THREADS; i++) {
+            //MASTER_ARGS_ARRAY->file_paths = malloc(sizeof(char*) * (NUM_REQUESTS / NUM_WORKER_THREADS));
+           //for (y = 0; y <= NUM_REQUESTS / NUM_WORKER_THREADS; y++) {
+            //MASTER_ARGS_ARRAY[i].file_paths[y] = malloc((256 * (sizeof(char))));
+        //}
+        //}
+
+        //------------fill the arrays of file names before assigning
+        for (i = 0; i < NUM_WORKER_THREADS; i++) {
+            printf("INSIDE LOOP FOR THREAD %d",i);
+            int x = 0;
+            MASTER_ARGS_ARRAY[i].file_paths_size = 0;
+            for (x = 0; x < (NUM_REQUESTS/NUM_WORKER_THREADS); x++) {
+                printf("x is %d\n",x);
+                MASTER_ARGS_ARRAY[i].file_paths[x] = TARGET_FILE_POINTERS[x%TARGET_FILES_SIZE];
+                MASTER_ARGS_ARRAY[i].file_paths_size++;
+                printf("\nTHREAD %d ASSIGNED MASTER ARG ARRAY ITER %d,FILE PATH NUM %d, FILE PATH %s, WHICH CURRENTLY HAS %d ITEMS\n",
+                        i,i,x,MASTER_ARGS_ARRAY[i].file_paths[x],MASTER_ARGS_ARRAY[i].file_paths_size);
+            }
+        }
+
+        // i guess we will start clock here?
+
+        start = clock();
+        global_metrics.t_start = start;
 
 
-            int ran_number = rand() % 4 + 1;
-
-                //------------------SOCKET STUFF---------------------------
-                printf("\nMaking a socket");
-                /* make a socket */
-                hSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-                if (hSocket == SOCKET_ERROR) {
-                    printf("\nCould not make a socket\n");
-                    return 0;
-                }
-                /* get IP address from name */
-                pHostInfo = gethostbyname(strHostName);
-                /* copy address into long */
-                memcpy(&nHostAddress, pHostInfo->h_addr, pHostInfo->h_length);
-                /* fill address struct */
-                Address.sin_addr.s_addr = nHostAddress;
-                Address.sin_port = htons(nHostPort);
-                Address.sin_port = htons(nHostPort);
-                Address.sin_family = AF_INET;
-                printf("\nConnecting to %s on port %d", strHostName, nHostPort);
-                /* connect to host */
-                if (connect(hSocket, (struct sockaddr *) &Address, sizeof(Address)) == SOCKET_ERROR) {
-                    printf("\nCould not connect to host\n");
-                    return 0;
-                }
-
-                //-----------------END SOCKET STUFF-------------------------
-
+        int turn_off = 0;
+        if(turn_off != 1) {
+            //-------1 SOCKET PER THREAD---------
+            for (i = 0; i < NUM_WORKER_THREADS; i++) {
                 //-----------------THREAD STUFF-----------------
-
                 int rc;
                 long t = i;
+                //-----FINISH PARAMS FOR THREAD-----
+                //struct worker_args_struct current_thread_args = MASTER_ARGS_ARRAY[i];
+                int x;
+                for(x = 0; x <= MASTER_ARGS_ARRAY[i].file_paths_size; x++) {
+                    printf("\n INSIDE BOSS: ITER %d FILE NEAME IS %s",x,MASTER_ARGS_ARRAY[i].file_paths[x]);
+                }
 
+                MASTER_ARGS_ARRAY[i].thread_id = t;
+                MASTER_ARGS_ARRAY[i].download_directory = PARAMETERS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY;
 
-
-                //maybe instead of sending a single structure we sohuld send a queue of structures...
-                //more effecienit than constantly sending structures
-
-                //-----CREATE PARAMS FOR THREAD-----
-                struct worker_args_struct thread_args;
-                thread_args.file_name = TARGET_FILE_POINTERS[ran_number];
-                printf("THREAD ARG FILE NAME FOR THREAD %ld is %s \n", t, thread_args.file_name);
-                thread_args.hsocket = hSocket;
-                printf("THREAD ARG SOCKET HANDLER FOR THREAD %ld is %d \n", t, thread_args.hsocket);
-                thread_args.thread_id = t;
-                printf("THREAD ARG ID FOR THREAD %ld is %d \n", t, thread_args.thread_id);
-                // need file path too
-                thread_args.full_file_path = PARAMETERS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY;
+                printf("THREAD ARG ID FOR THREAD %ld is %d \n", t, MASTER_ARGS_ARRAY[i].thread_id);
 
                 printf("\nIn file loop: creating thread %ld\n", t);
-                rc = pthread_create(&threads[t], NULL, DoWorkThread, (void *) &thread_args);
+                rc = pthread_create(&threads[t], NULL, DoWorkThread, (void *) &MASTER_ARGS_ARRAY[i]);
                 if (rc) {
                     printf("\nERROR; return code from pthread_create() is %d\n", rc);
                     exit(-1);
                 }
+
+            }
+            // clean up and join
+            int iter;
+            for (iter = 0; iter < NUM_WORKER_THREADS; iter++) {
+                //try to rejoin main thread in worker function
+                //free(MASTER_ARGS_ARRAY->file_paths[iter]);
+                pthread_join(threads[iter], NULL);
+            }
+
+
         }
 
-        int iter;
-        for (iter = 0; iter < 100; iter++) {
-            //try to rejoin main thread in worker function
-            pthread_join(threads[iter], NULL);
-        }
+        end = clock();
+        global_metrics.t_end = end;
+        global_metrics.total_msec = global_metrics.t_end - global_metrics.t_start;
+    //_start: time after worker threads created, but before any of them starts sending requests
+    //t_end: time when all worker threads receive all responses
+    //total time elapsed: t_end - t_start
+    //total bytes received: sum of all per_request_bytes_received
+    //avg throughput: (total bytes received) / (total_time_elapsed)
+            //avg response time: (sum of all pre-request-response-time) / (total number of requests)
 
-        return 0;
+    printf("START: %d\n",global_metrics.t_start);
+    printf("END: %d\n",global_metrics.t_end);
+    printf("TOTAL TIME ELAPSED: %d\n",global_metrics.total_msec);
+    printf("TOTAL BYTES RECEIVED: %f\n",global_metrics.bytes_sent);
+    printf("AVG. RESPONSE TIME : %f\n",(global_metrics.total_msec/global_metrics.bytes_sent));
+    printf("AVG. THROUGHPUT: %f\n",(global_metrics.bytes_sent/global_metrics.total_msec));
+    printf("FILES FINISHED: %d\n",global_metrics.finished_files);
+
+    return 0;
+
     }
 
 
      //int DoWork(char *FILE_NAME, int hSocket) {
      void *DoWorkThread(void* THREAD_ARGS){
 
+         struct worker_args_struct2 *arguments;
+         arguments = (struct worker_args_struct2*) THREAD_ARGS;
 
-                struct worker_args_struct *arguments;
-                arguments = (struct worker_args_struct*) THREAD_ARGS;
+         int workload_amt = (NUM_REQUESTS/NUM_WORKER_THREADS);
+         printf("workload amt is %d\n",workload_amt);
 
-                int thread_id = arguments->thread_id;
-                printf("THREAD #%d SPINNING UP\n",thread_id);
+         int thread_id = arguments->thread_id;
 
-                char* FILE_NAME = arguments->file_name;
-                int hSocket = arguments->hsocket;
+         int i = 0;
+         for(i = 0; i <= arguments->file_paths_size - 1; i++)
+         {
+             if(arguments->file_paths[i] != '\0') {
 
-
-                //long REQUESTED_FILE_SIZE;
-                char *GET_FILE_RESPONSE = malloc((256 * (sizeof(char))));
-                char *GET_FILE_REQUEST = malloc((256 * (sizeof(char))));
-                char *GET_FILE_TOTAL_SIZE = malloc((256 * (sizeof(char))));
-                // destination path
+                 char *FILE_NAME = arguments->file_paths[i];
 
 
-                //----#1------------FORM GETFILE REQUEST--------------
-                GET_FILE_REQUEST[0] = '\0';
-                strcat(GET_FILE_REQUEST, "GetFile GET ");
-                //target file pointer is file name with \ attached
-                strcat(GET_FILE_REQUEST, FILE_NAME);
-                strcat(GET_FILE_REQUEST, "\0");
-                printf("\nTHREAD %d FULL GET FILE REQUEST TO SEND: \"%s\"",thread_id,GET_FILE_REQUEST);
+                 printf("dat file name tho (in thread:) %s \n", arguments->file_paths[i]);
+                 //printf("download dir (in thread:) %s \n\n",arguments->download_directory);
+                 //printf("dile path size tho (in thread:) %d \n\n",arguments->file_paths_size);
+                 //printf("thread id tho (in thread:) %d \n\n",arguments->thread_id);
 
-                //----#2------------SEND GET FILE REQUEST----------------
+                 int hSocket;                 /* handle to socket */
+                 struct hostent *pHostInfo;   /* holds info about a machine */
+                 struct sockaddr_in Address;  /* Internet socket address stuct */
+                 long nHostAddress;
+                 //char pBuffer[FILE_STORAGE_BUFFER_SIZE];
+                 //unsigned nReadAmount;
+
+                 //------------------SOCKET STUFF---------------------------
+                 printf("\nMaking a socket");
+                 /* make a socket */
+                 hSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+                 if (hSocket == SOCKET_ERROR) {
+                     printf("\nCould not make a socket\n");
+                     return 0;
+                 }
+                 /* get IP address from name */
+                 pHostInfo = gethostbyname(strHostName);
+                 /* copy address into long */
+                 memcpy(&nHostAddress, pHostInfo->h_addr, pHostInfo->h_length);
+                 /* fill address struct */
+                 Address.sin_addr.s_addr = nHostAddress;
+                 Address.sin_port = htons(nHostPort);
+                 Address.sin_port = htons(nHostPort);
+                 Address.sin_family = AF_INET;
+                 printf("\nConnecting to %s on port %d\n", strHostName, nHostPort);
+                 /* connect to host */
+                 if (connect(hSocket, (struct sockaddr *) &Address, sizeof(Address)) == SOCKET_ERROR) {
+                     printf("\nCould not connect to host\n");
+                     return 0;
+                 }
+
+                 //-----------------END SOCKET STUFF-------------------------
 
 
-                //SLEEP FOR 4 SECONDS TO ALLOW SERVER TO BE READY???
+                 printf("\nTHREAD #%d SPINNING UP\n", thread_id);
 
-                write(hSocket, GET_FILE_REQUEST, 256 * sizeof(char));
-                sleep(1);
+                 //long REQUESTED_FILE_SIZE;
+                 char *GET_FILE_RESPONSE = malloc((256 * (sizeof(char))));
+                 char *GET_FILE_REQUEST = malloc((256 * (sizeof(char))));
+                 char *GET_FILE_TOTAL_SIZE = malloc((256 * (sizeof(char))));
+                 // destination path
 
-                //----#3------------READ GET FILE RESPONSE/SIZE TO EXPECT---------------
-                //GetFile STATUS filesize FILE
-                //get response
-                read(hSocket, GET_FILE_RESPONSE, 256 * (sizeof(char)));
-                // get file size
-                read(hSocket, GET_FILE_TOTAL_SIZE, 256 * (sizeof(char)));
-                printf("\nReceived \"%s\" from server\n", GET_FILE_RESPONSE);
-                printf("\n File to expect is size \"%s\"\n", GET_FILE_TOTAL_SIZE);
 
-                //----#4------------PARSE REQUEST STATUS-----------------
-                char *RESPONSE_STATUS = substring(8, 2, GET_FILE_RESPONSE, 3);
-                printf("\nStatus of response is  \"%s\", read amount \"%ld\"\n", RESPONSE_STATUS, sizeof(RESPONSE_STATUS));
-                if (strcmp(RESPONSE_STATUS, "OK") != 0) {
-                    printf("\nThere was an error!");
-                    close(hSocket);
-                    return 0;
-                }
+                 //----#1------------FORM GETFILE REQUEST--------------
+                 GET_FILE_REQUEST[0] = '\0';
+                 strcat(GET_FILE_REQUEST, "GetFile GET ");
+                 //target file pointer is file name with \ attached
+                 strcat(GET_FILE_REQUEST, FILE_NAME);
+                 strcat(GET_FILE_REQUEST, "\0");
+                 printf("\nTHREAD %d FULL GET FILE REQUEST TO SEND: \"%s\"", thread_id, GET_FILE_REQUEST);
 
-                //----#5------------CREATE DESTINATION PATH-------------
-                //file name already has /
-                char* FULL_FILE_PATH = arguments->full_file_path;
-                strcat(FULL_FILE_PATH, FILE_NAME);
-                printf("Dest. final name is \"%s\" \n", FULL_FILE_PATH);
+                 //----#2------------SEND GET FILE REQUEST----------------
 
-                FILE *fp = fopen(FULL_FILE_PATH, "ab");
-                if (NULL == fp) {
-                    printf("Error opening file");
-                    exit(1);
-                }
+                 write(hSocket, GET_FILE_REQUEST, 256 * sizeof(char));
 
-                int bytesReceived = 0;
-                char buff[FILE_TRANSFER_BUFFER_SIZE];
-                memset(buff, '0', sizeof(buff));
-                while ((bytesReceived = recv(hSocket, buff, 4, 0)) > 0) {
-                    fwrite(buff, 1, bytesReceived, fp);
-                    if (bytesReceived % 100 == 0) {
-                        printf("Bytes received %d\n", bytesReceived);
-                    }
-                }
-                if (bytesReceived < 0) {
-                    printf("\n Read Error \n");
-                    printf("Errno %d %s\n", errno, strerror(errno));
-                }
+                 //----#3------------READ GET FILE RESPONSE/SIZE TO EXPECT---------------
+                 //GetFile STATUS filesize FILE
+                 //get response
+                 read(hSocket, GET_FILE_RESPONSE, 256 * (sizeof(char)));
+                 // get file size
+                 read(hSocket, GET_FILE_TOTAL_SIZE, 256 * (sizeof(char)));
+                 printf("\nReceived \"%s\" from server\n", GET_FILE_RESPONSE);
+                 printf("\n File to expect is size \"%s\"\n", GET_FILE_TOTAL_SIZE);
 
-                //---------------CLOSE FILE---------
-                fclose(fp);
-                //char log[256];
-                //sprintf(log,"Writing to file \"%s\"\n",FullFilePath);
-                //WriteToFile(log,"CLIENT-LOG.txt");
-                //WriteToFile(STORAGE_BUFFER,FullFilePath);
+                 global_metrics.bytes_sent += atoi(GET_FILE_TOTAL_SIZE);
 
-                //printf("\nReceived \"%s\" from server\n",pBuffer);
-                //printf("\nRecieved amount is \"%d\" ", nReadAmount);
-                //printf("\nWriting \"%s\" to file....\n",pBuffer);
+                 //----#4------------PARSE REQUEST STATUS-----------------
+                 char *RESPONSE_STATUS = substring(8, 2, GET_FILE_RESPONSE, 3);
+                 printf("\nStatus of response is  \"%s\", read amount \"%ld\"\n", RESPONSE_STATUS, sizeof(RESPONSE_STATUS));
+                 if (strcmp(RESPONSE_STATUS, "OK") != 0) {
+                     printf("\nThere was an error!");
+                     close(hSocket);
+                     return 0;
+                 }
 
-                printf("\nClosing socket\n");
-                /* close socket */
-                if (close(hSocket) == SOCKET_ERROR) {
-                    printf("\nCould not close socket\n");
-                    return 0;
-                }
+                 //----#5------------CREATE DESTINATION PATH-------------
+                 //file name already has /
 
-                //---------------FREE POINTERS-----------
-                free(FULL_FILE_PATH);
-                free(GET_FILE_REQUEST);
-                free(GET_FILE_RESPONSE);
-                free(GET_FILE_TOTAL_SIZE);
+                 char *FULL_FILE_PATH_TO_SAVE = malloc(256 * (sizeof(char)));
+                 strcat(FULL_FILE_PATH_TO_SAVE, arguments->download_directory);
+                 strcat(FULL_FILE_PATH_TO_SAVE, FILE_NAME);
 
-         pthread_join(threads[thread_id], NULL);
 
+                 printf("Dest. final name is \"%s\" \n", FULL_FILE_PATH_TO_SAVE);
+
+                 FILE *fp = fopen(FULL_FILE_PATH_TO_SAVE, "ab");
+                 if (NULL == fp) {
+                     printf("Error opening file");
+                     exit(1);
+                 }
+
+                 int bytesReceived = 0;
+                 char buff[FILE_TRANSFER_BUFFER_SIZE];
+                 memset(buff, '0', sizeof(buff));
+                 while ((bytesReceived = recv(hSocket, buff, 4, 0)) > 0) {
+                     fwrite(buff, 1, bytesReceived, fp);
+                     if (bytesReceived % 100 == 0) {
+                         printf("Bytes received %d\n", bytesReceived);
+
+                     }
+
+                 }
+                 if (bytesReceived < 0) {
+                     printf("\n Read Error \n");
+                     printf("Errno %d %s\n", errno, strerror(errno));
+                 }
+
+
+                 //---------------CLOSE FILE---------
+                 fclose(fp);
+                 //char log[256];
+                 //sprintf(log,"Writing to file \"%s\"\n",FullFilePath);
+                 //WriteToFile(log,"CLIENT-LOG.txt");
+                 //WriteToFile(STORAGE_BUFFER,FullFilePath);
+
+                 //printf("\nReceived \"%s\" from server\n",pBuffer);
+                 //printf("\nRecieved amount is \"%d\" ", nReadAmount);
+                 //printf("\nWriting \"%s\" to file....\n",pBuffer);
+
+                 printf("\nClosing socket\n");
+                 /* close socket */
+                 if (close(hSocket) == SOCKET_ERROR) {
+                     printf("\nCould not close socket\n");
+                     return 0;
+                 }
+
+                 //---------------FREE POINTERS-----------
+                 free(FULL_FILE_PATH_TO_SAVE);
+                 free(GET_FILE_REQUEST);
+                 free(GET_FILE_RESPONSE);
+                 free(GET_FILE_TOTAL_SIZE);
+                 //free(arguments->file_paths[arguments->thread_id]);
+                 global_metrics.finished_files ++;
+
+                 printf("METRICS: FILES CURRENTLY FINISHED: %d\n",global_metrics.finished_files);
+
+             }
+
+
+             pthread_join(threads[thread_id], NULL);
+         }
          return 0;
      }
+
 
 
 
@@ -445,38 +551,17 @@ size_t explode(const char *delim, const char *str, char **pointers_out, char *by
 {
     size_t  delim_length        = strlen(delim);
     char   **pointers_out_start = pointers_out;
-
     assert(delim_length > 0);
-
     for (;;) {
-        /* Find the next occurrence of the item delimiter. */
         const char *delim_pos = strstr(str, delim);
-
-        /*
-         * Emit the current output buffer position, since that is where the
-         * next item will be written.
-         */
         *pointers_out++ = bytes_out;
-
         if (delim_pos == NULL) {
-            /*
-             * No more item delimiters left.  Treat the rest of the input
-             * string as the last item.
-             */
             strcpy(bytes_out, str);
             return pointers_out - pointers_out_start;
         } else {
-            /*
-             * Item delimiter found.  The bytes leading up to it form the next
-             * string.
-             */
             while (str < delim_pos)
                 *bytes_out++ = *str++;
-
-            /* Don't forget the NUL terminator. */
             *bytes_out++ = '\0';
-
-            /* Skip over the delimiter. */
             str += delim_length;
         }
     }

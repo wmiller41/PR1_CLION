@@ -203,6 +203,7 @@ int main(int argc, char **argv) {
         struct server_worker_args TEMP_ARGS_FOR_QUEUE;
         TEMP_ARGS_FOR_QUEUE.hsocket = hSocket;
 
+
         //--------CRITICAL SECTION---------/
         pthread_mutex_lock(&m);
             printf("\nINSIDE BOSS' CRITICAL SECTION\n");
@@ -266,16 +267,24 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
         //SEE IF CLIENT SENT A MESSAGE?
         char *strGetFileRequest = malloc(256 * sizeof(char));
         printf("\nI should be receiving a well formed Get File request.\n");
+
+
+
+
         printf("size allocated for reading in is \"%ld\"", sizeof(strGetFileRequest));
         //----#1------------RECEIVE GETFILE REQUEST--------------
+
+        printf("\n\nis this hitting?\n\n");
         read(hSocket, strGetFileRequest, 256 * sizeof(char));
 
-        if (strGetFileRequest != NULL) {
-            printf("\nReceieved \"%s\" from client", strGetFileRequest);
-        }
-        else {
-            printf("No GetFile request from client");
-        }
+        printf("request %s",strGetFileRequest);
+
+        //if (strGetFileRequest != NULL) {
+            //printf("\nReceieved \"%s\" from client", strGetFileRequest);
+       // }
+       // else {
+            //printf("No GetFile request from client");
+       // }
 
         //GetFile STATUS filesize FILE
         //assume that "getFile GET " protocol means that file name will start from
@@ -284,7 +293,7 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
         //---#2-----------PARSE GET FILE REQUEST, GET NAME-------
         char *GET_FILE_RETURN = malloc(256 * sizeof(char));
 
-        char *strFileName = "";
+        char *strFileName = malloc(256 * sizeof(char));
         strFileName[0] = '\0';
         strcat(strFileName,PARAMETERS.PARAM_PATH);
         strcat(strFileName,substring(13, 1000, strGetFileRequest, (256 * sizeof(char))));
@@ -378,6 +387,7 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
             free(STORAGE_BUFFER);
             free(GET_FILE_RETURN);
             free(strGetFileRequest);
+            free(strFileName);
             //free(CHAR_FILE_SIZE);
             /* read from socket into buffer */
             //read(hSocket,STORAGE_BUFFER,FILE_STORAGE_BUFFER_SIZE);
@@ -410,7 +420,7 @@ options:
 
     //set defaults
     RETURN_PARAMS.PARAM_PORT = 8888;
-    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 1;
+    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 5;
 
 
 
