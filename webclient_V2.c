@@ -9,12 +9,13 @@
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
-
+#include <time.h>
 
 #define SOCKET_ERROR        -1
 #define FILE_STORAGE_BUFFER_SIZE 15000000
 #define FILE_TRANSFER_BUFFER_SIZE 2048
 #define HOST_NAME_SIZE      255
+
 
 /*
 Client Requirements
@@ -58,7 +59,89 @@ struct worker_args_struct {
     char* file_name;
     int hsocket;
     int thread_id;
+    char* full_file_path;
 };
+
+
+
+
+
+
+pthread_t threads[100];
+
+/*
+options:
+-s server address (Default: 0.0.0.0)
+-p server port (Default: 8888)
+-t number of worker threads (Default: 1, Range: 1-100)
+-w path to workload file (Default: workload.txt)
+-d path to downloaded file directory (Default: null)
+-r number of total requests (Default: 10, Range: 1-1000)
+*/
+
+struct client_params{
+    char* PARAM_SERVER_ADDRESS;
+    int PARAM_PORT;
+    int PARAM_NUM_WORKER_THREADS;
+    char* PARAM_PATH_TO_WORKLOAD_FILE;
+    char* PARAM_PATH_TO_DOWNLOAD_DIRECTORY;
+    int PARAM_NUM_OF_REQUESTS;
+};
+
+struct client_params PARAMETERS;
+
+struct client_params get_parameters(int num_args, char** arguments);
+
+struct client_params get_parameters(int num_args, char** arguments){
+
+
+    struct client_params RETURN_PARAMS;
+    RETURN_PARAMS.PARAM_PORT = 8888;
+    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 1;
+    RETURN_PARAMS.PARAM_SERVER_ADDRESS = "0.0.0.0";
+    RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = "workload.txt";
+    RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = 10;
+
+
+    int c;
+
+    opterr = 0;
+    while ((c = getopt (num_args, arguments, "ptfh:")) != -1)
+        switch (c)
+        {
+            case 'p':
+                RETURN_PARAMS.PARAM_PORT = atoi(optarg);
+                break;
+            case 't':
+                RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = atoi(optarg);
+                break;
+            case 'w':
+                RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = optarg;
+                break;
+            case 's':
+                RETURN_PARAMS.PARAM_SERVER_ADDRESS = optarg;
+                break;
+            case 'd':
+                RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = optarg;
+                break;
+            case 'r':
+                RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = atoi(optarg);
+                break;
+            default:
+                abort ();
+        }
+
+
+    //printf("args...port:%d threads:%d path:%s",
+            //RETURN_PARAMS.PARAM_PORT,
+            //RETURN_PARAMS.PARAM_NUM_WORKER_THREADS);
+            //RETURN_PARAMS.PARAM_PATH);
+
+    return RETURN_PARAMS;
+
+
+}
+
 
 
 int main(int argc, char **argv) {
@@ -73,21 +156,34 @@ int main(int argc, char **argv) {
         //unsigned nReadAmount;
         char strHostName[HOST_NAME_SIZE];
         int nHostPort;
+        int NUM_REQUESTS;
+        char *WORKLOAD_FILE_NAME;
+        char *FULL_FILE_PATH = malloc(256);
+        //int NUM_WORKER_THREADS;
+        FULL_FILE_PATH[0] = '\0';
+        //place in folder
 
         if (argc < 3) {
             printf("\nUsage: client host-name host-port\n");
             return 0;
         }
         else {
-            strcpy(strHostName, argv[1]);
-            nHostPort = atoi(argv[2]);
+            // get parameters
+            PARAMETERS = get_parameters(argc,argv);
+            // assign parameters
+            strcpy(strHostName,PARAMETERS.PARAM_SERVER_ADDRESS);
+            nHostPort = PARAMETERS.PARAM_PORT;
+            WORKLOAD_FILE_NAME = PARAMETERS.PARAM_PATH_TO_WORKLOAD_FILE;
+            NUM_REQUESTS = PARAMETERS.PARAM_NUM_OF_REQUESTS;
+            strcat(FULL_FILE_PATH,PARAMETERS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY);
+            //NUM_WORKER_THREADS = PARAMETERS.PARAM_NUM_WORKER_THREADS;
         }
 
 
         /*---TO DO---*/
 
         //1.) read workload file in
-        char *WORKLOAD_FILE_NAME = "workload-0.txt";
+
         char *WORKLOAD_FILE_CONTENTS = ReadFile(WORKLOAD_FILE_NAME);
 
         //2.) USE "GET FILE" protocol to request files
@@ -108,13 +204,14 @@ int main(int argc, char **argv) {
         // one thread per file for now
 
         //-------POOL OF THREADS-------
-        int NUM_THREADS = TARGET_FILES_SIZE;
-        pthread_t threads[NUM_THREADS];
 
         //for loop begin
         //for each file to get
         int i = 0;
-        for (i = 0; i < TARGET_FILES_SIZE; i++) {
+        for (i = 0; i < NUM_REQUESTS; i++) {
+
+
+            int ran_number = rand() % 4 + 1;
 
                 //------------------SOCKET STUFF---------------------------
                 printf("\nMaking a socket");
@@ -154,14 +251,15 @@ int main(int argc, char **argv) {
 
                 //-----CREATE PARAMS FOR THREAD-----
                 struct worker_args_struct thread_args;
-                thread_args.file_name = TARGET_FILE_POINTERS[i];
+                thread_args.file_name = TARGET_FILE_POINTERS[ran_number];
                 printf("THREAD ARG FILE NAME FOR THREAD %ld is %s \n", t, thread_args.file_name);
                 thread_args.hsocket = hSocket;
                 printf("THREAD ARG SOCKET HANDLER FOR THREAD %ld is %d \n", t, thread_args.hsocket);
                 thread_args.thread_id = t;
                 printf("THREAD ARG ID FOR THREAD %ld is %d \n", t, thread_args.thread_id);
+                // need file path too
+                thread_args.full_file_path = PARAMETERS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY;
 
-                sleep(2);
                 printf("\nIn file loop: creating thread %ld\n", t);
                 rc = pthread_create(&threads[t], NULL, DoWorkThread, (void *) &thread_args);
                 if (rc) {
@@ -171,7 +269,8 @@ int main(int argc, char **argv) {
         }
 
         int iter;
-        for (iter = 0; iter < NUM_THREADS; iter++) {
+        for (iter = 0; iter < 100; iter++) {
+            //try to rejoin main thread in worker function
             pthread_join(threads[iter], NULL);
         }
 
@@ -198,7 +297,7 @@ int main(int argc, char **argv) {
                 char *GET_FILE_REQUEST = malloc((256 * (sizeof(char))));
                 char *GET_FILE_TOTAL_SIZE = malloc((256 * (sizeof(char))));
                 // destination path
-                char *FULL_FILE_PATH = malloc(256);
+
 
                 //----#1------------FORM GETFILE REQUEST--------------
                 GET_FILE_REQUEST[0] = '\0';
@@ -206,8 +305,7 @@ int main(int argc, char **argv) {
                 //target file pointer is file name with \ attached
                 strcat(GET_FILE_REQUEST, FILE_NAME);
                 strcat(GET_FILE_REQUEST, "\0");
-                printf("\nFIRST FILE TO REQUEST: \"%s\"", FILE_NAME);
-                printf("\nFULL GET FILE REQUEST TO SEND: \"%s\"", GET_FILE_REQUEST);
+                printf("\nTHREAD %d FULL GET FILE REQUEST TO SEND: \"%s\"",thread_id,GET_FILE_REQUEST);
 
                 //----#2------------SEND GET FILE REQUEST----------------
 
@@ -215,6 +313,7 @@ int main(int argc, char **argv) {
                 //SLEEP FOR 4 SECONDS TO ALLOW SERVER TO BE READY???
 
                 write(hSocket, GET_FILE_REQUEST, 256 * sizeof(char));
+                sleep(1);
 
                 //----#3------------READ GET FILE RESPONSE/SIZE TO EXPECT---------------
                 //GetFile STATUS filesize FILE
@@ -235,10 +334,8 @@ int main(int argc, char **argv) {
                 }
 
                 //----#5------------CREATE DESTINATION PATH-------------
-                FULL_FILE_PATH[0] = '\0';
-                //place in folder
-                strcat(FULL_FILE_PATH, "PAYLOAD");
                 //file name already has /
+                char* FULL_FILE_PATH = arguments->full_file_path;
                 strcat(FULL_FILE_PATH, FILE_NAME);
                 printf("Dest. final name is \"%s\" \n", FULL_FILE_PATH);
 
@@ -286,7 +383,7 @@ int main(int argc, char **argv) {
                 free(GET_FILE_RESPONSE);
                 free(GET_FILE_TOTAL_SIZE);
 
-
+         pthread_join(threads[thread_id], NULL);
 
          return 0;
      }

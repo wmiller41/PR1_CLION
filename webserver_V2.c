@@ -16,11 +16,9 @@
 #define SOCKET_ERROR -1
 #define FILE_STORAGE_BUFFER_SIZE 15000000
 #define FILE_TRANSFER_BUFFER_SIZE 2048
-#define QUEUE_SIZE 5
+#define QUEUE_SIZE 1024
 
-#define WORKER_QUEUE_SIZE 32
-
-
+#define WORKER_QUEUE_SIZE 15
 
 
 //usage webserver[options]
@@ -76,21 +74,32 @@ pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t c_work = PTHREAD_COND_INITIALIZER;
 pthread_cond_t c_boss = PTHREAD_COND_INITIALIZER;
 
+struct server_params{
+    int PARAM_PORT;
+    int PARAM_NUM_WORKER_THREADS;
+    char* PARAM_PATH;
+};
+
+struct server_params PARAMETERS;
+struct server_params get_parameters(int num_args, char** arguments);
+
 void InitializeQueue(struct server_worker_arg_queue *wq);
 void AddToEnd(struct server_worker_arg_queue *wq,struct server_worker_args wa);
 struct server_worker_args RemoveFromFront(struct server_worker_arg_queue *wq);
 
 
 int main(int argc, char **argv) {
-    printf("Hello, I am the web server!!!!!\n");
+    printf("-----SERVER STARTED------\n");
 
+    //----------GET PARAMETERS-------------------
+    PARAMETERS = get_parameters(argc,argv);
 
     //----------CREATE QUEUE FOR WORKERS--------
     // queue is just int socket descriptors.
     struct server_worker_arg_queue wq;
     InitializeQueue(&wq);
 
-    int NUM_THREADS = 2;
+    int NUM_THREADS = PARAMETERS.PARAM_NUM_WORKER_THREADS;
     int t;
 
     pthread_t threads[NUM_THREADS];
@@ -122,23 +131,23 @@ int main(int argc, char **argv) {
         int nAddressSize = sizeof(struct sockaddr_in);
         //make this smaller?
 
-        int nHostPort;
+        int nHostPort = PARAMETERS.PARAM_PORT;
 
         //--------GET PARAMETERS HERE-----TO DO!!!!!!!!!!!!!!-----
-        if (argc < 2) {
-            printf("please review proper parameters");
-            return 0;
-        }
-        else {
+        //if (argc < 2) {
+            //rintf("please review proper parameters");
+            //return 0;
+        //}
+        //else {
             //------PARSE PARAMS
             //PORT
             //nHostPort=atoi(argv[1]);
             //this is the port we should run on.
             // if param doesn't exist, set to 8888
-            nHostPort = 8888;
+            //nHostPort = 8888;
             //NUM THREADS
             //PATH TO FILES
-        }
+        //}
 
         printf("\nStarting server");
 
@@ -203,8 +212,9 @@ int main(int argc, char **argv) {
                 //avoid overflow
                 exit(1);
             }
-            while (cur == WORKER_QUEUE_SIZE) {  /* block if buffer is full */
-                printf("BOSS THREAD IS WAITING\n");
+
+            while (cur == (GLOBAL_WORKER_QUEUE.NEXT_TO_REMOVE + 1)) {  /* block if buffer is full */
+                printf("BOSS THREAD IS WAITING - NEXT TO ADD IS SAME AS NEXT TO REMOVE\n");
                 pthread_cond_wait (&c_boss, &m);
             }
             printf("\nADDING SOCKED DESC %d TO QUEUE",TEMP_ARGS_FOR_QUEUE.hsocket);
@@ -217,7 +227,7 @@ int main(int argc, char **argv) {
 
         //------------------AWAKE SLEEPING WORKER(S)
         printf("\nSIGNALING C_WORKER\n");
-        pthread_cond_broadcast(&c_work);
+        pthread_cond_signal(&c_work);
 
     }
 }
@@ -234,7 +244,7 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
         printf("WORKER THREAD IS LOCKING\n");
         pthread_mutex_lock (&m);
 
-            while(GLOBAL_WORKER_QUEUE.NEXT_TO_ADD == GLOBAL_WORKER_QUEUE.NEXT_TO_REMOVE)
+            while(GLOBAL_WORKER_QUEUE.NEXT_TO_REMOVE >= (GLOBAL_WORKER_QUEUE.NEXT_TO_ADD))
             //((GLOBAL_WORKER_QUEUE.NEXT_TO_ADD - 1) == GLOBAL_WORKER_QUEUE.NEXT_TO_REMOVE))
             {//block as no new data is around
                 printf("\nWORKER THREAD IS WAITING\n");
@@ -246,7 +256,7 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
             pthread_mutex_unlock (&m);
 
         printf("WORKER THREAD IS SIGNALING BOSS\n");
-        pthread_cond_broadcast(&c_boss);
+        pthread_cond_signal(&c_boss);
         //END CRITICAL SECTION
 
         //------GET SOCKET FROM ARGS------
@@ -273,7 +283,11 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
 
         //---#2-----------PARSE GET FILE REQUEST, GET NAME-------
         char *GET_FILE_RETURN = malloc(256 * sizeof(char));
-        char *strFileName = substring(13, 1000, strGetFileRequest, (256 * sizeof(char)));
+
+        char *strFileName = "";
+        strFileName[0] = '\0';
+        strcat(strFileName,PARAMETERS.PARAM_PATH);
+        strcat(strFileName,substring(13, 1000, strGetFileRequest, (256 * sizeof(char))));
 
         printf("\nFile name is \"%s\"", strFileName);
 
@@ -380,6 +394,59 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
         return NULL;
 
 }
+struct server_params get_parameters(int num_args, char** arguments)
+{
+
+
+    /*
+options:
+-p port (default: 8888)
+-t number of worker threads (default :1, range 1-1000)
+-f path to static files (defailt: .)
+-h show help message
+
+*/
+    struct server_params RETURN_PARAMS;
+
+    //set defaults
+    RETURN_PARAMS.PARAM_PORT = 8888;
+    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 1;
+
+
+
+    int c;
+
+    opterr = 0;
+    while ((c = getopt (num_args, arguments, "ptfh:")) != -1)
+        switch (c)
+        {
+            case 'p':
+                RETURN_PARAMS.PARAM_PORT = atoi(optarg);
+                break;
+            case 't':
+                RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = atoi(optarg);
+                break;
+            case 'f':
+                RETURN_PARAMS.PARAM_PATH = optarg;
+                break;
+            case 'h':
+                exit(1);
+                break;
+            default:
+                abort ();
+        }
+
+
+    printf("args...port:%d threads:%d path:%s",
+            RETURN_PARAMS.PARAM_PORT,
+            RETURN_PARAMS.PARAM_NUM_WORKER_THREADS,
+            RETURN_PARAMS.PARAM_PATH);
+
+    return RETURN_PARAMS;
+
+}
+
+
 
 void FillAddress(struct sockaddr_in *Address,int nHostPort) {
 	//FILL ADDRESS STRUCTURE
