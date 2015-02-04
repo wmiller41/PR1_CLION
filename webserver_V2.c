@@ -18,7 +18,7 @@
 #define FILE_TRANSFER_BUFFER_SIZE 2048
 #define QUEUE_SIZE 1024
 
-#define WORKER_QUEUE_SIZE 15
+#define WORKER_QUEUE_SIZE 1024
 
 
 //usage webserver[options]
@@ -183,6 +183,8 @@ int main(int argc, char **argv) {
 
         printf("\nMaking a listen queue of %d elements", QUEUE_SIZE);
         /* establish listen queue */
+
+
     while(1){
         if (listen(hServerSocket, QUEUE_SIZE) == SOCKET_ERROR) {
             printf("\nCould not listen\n");
@@ -404,6 +406,7 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
         return NULL;
 
 }
+
 struct server_params get_parameters(int num_args, char** arguments)
 {
 
@@ -420,7 +423,7 @@ options:
 
     //set defaults
     RETURN_PARAMS.PARAM_PORT = 8888;
-    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 5;
+    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 100;
 
 
 

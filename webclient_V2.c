@@ -114,10 +114,10 @@ struct client_params get_parameters(int num_args, char** arguments){
 
     struct client_params RETURN_PARAMS;
     RETURN_PARAMS.PARAM_PORT = 8888;
-    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 4;
+    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 2;
     RETURN_PARAMS.PARAM_SERVER_ADDRESS = "0.0.0.0";
-    RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = "workload-1.txt";
-    RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = 12;
+    RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = "workload-2.txt";
+    RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = 10;
     RETURN_PARAMS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY = "PAYLOAD";
 
 
@@ -227,34 +227,31 @@ int main(int argc, char **argv) {
         printf("Seperated workload into \"%d\" files\n", TARGET_FILES_SIZE);
 
         free(WORKLOAD_FILE_CONTENTS);
-        //------------1 per worker--------
 
         struct worker_args_struct2 MASTER_ARGS_ARRAY[NUM_WORKER_THREADS];
         //struct worker_args_struct MASTER_ARGS_ARRAY = malloc(sizeof(struct worker_args_struct)*NUM_WORKER_THREADS);
-        //------------ALLOCATE MEMORY FOR WORKER_ARGS PARAMETER STRUCTURE-----
 
-
-
+        //-----------------------FILL UP ONE LARGE ARRAY WITH "R" ITEMS TO MAKE SURE THAT ALL FILES ARE INCLUDED----------------
+        char* MASTER_FILE_ARRAY[NUM_REQUESTS];
+        int y = 0;
+        for (y = 0; y < NUM_REQUESTS; y++) {
+           MASTER_FILE_ARRAY[y] = TARGET_FILE_POINTERS[y%TARGET_FILES_SIZE];
+        }
+         //----------------------FILL EACH ITER IN MASTER_ARGS_ARRAY WITH R/T REQUESTS FROM MASTER_FILE_ARRAY-----------------
+        //---------ONE ITER PER THREAD-----------
         int i = 0;
-        //int y = 0;
-        //for (i = 0; i < NUM_WORKER_THREADS; i++) {
-            //MASTER_ARGS_ARRAY->file_paths = malloc(sizeof(char*) * (NUM_REQUESTS / NUM_WORKER_THREADS));
-           //for (y = 0; y <= NUM_REQUESTS / NUM_WORKER_THREADS; y++) {
-            //MASTER_ARGS_ARRAY[i].file_paths[y] = malloc((256 * (sizeof(char))));
-        //}
-        //}
-
-        //------------fill the arrays of file names before assigning
+        int FILE_ARRAY_COUNTER = 0;
         for (i = 0; i < NUM_WORKER_THREADS; i++) {
-            printf("INSIDE LOOP FOR THREAD %d",i);
+            printf("INSIDE LOOP FOR THREAD %d\n",i);
             int x = 0;
             MASTER_ARGS_ARRAY[i].file_paths_size = 0;
             for (x = 0; x < (NUM_REQUESTS/NUM_WORKER_THREADS); x++) {
                 printf("x is %d\n",x);
-                MASTER_ARGS_ARRAY[i].file_paths[x] = TARGET_FILE_POINTERS[x%TARGET_FILES_SIZE];
+                MASTER_ARGS_ARRAY[i].file_paths[x] = MASTER_FILE_ARRAY[FILE_ARRAY_COUNTER];
                 MASTER_ARGS_ARRAY[i].file_paths_size++;
-                printf("\nTHREAD %d ASSIGNED MASTER ARG ARRAY ITER %d,FILE PATH NUM %d, FILE PATH %s, WHICH CURRENTLY HAS %d ITEMS\n",
-                        i,i,x,MASTER_ARGS_ARRAY[i].file_paths[x],MASTER_ARGS_ARRAY[i].file_paths_size);
+                printf("\nTHREAD %d ASSIGNED MASTER ARG ARRAY ITER %d,MASTER FILE %d,FILE PATH NUM %d, FILE PATH %s, WHICH CURRENTLY HAS %d ITEMS\n",
+                        i,i,FILE_ARRAY_COUNTER,x,MASTER_ARGS_ARRAY[i].file_paths[x],MASTER_ARGS_ARRAY[i].file_paths_size);
+                FILE_ARRAY_COUNTER++;
             }
         }
 
@@ -545,7 +542,9 @@ char *substring(size_t start, size_t stop, const char *src, size_t size)
         count = size;
     }
     sprintf(dst, "%.*s", count, src + start);
-    return dst;
+    char* returnval = dst;
+    free(dst);
+    return returnval;
 }
 size_t explode(const char *delim, const char *str, char **pointers_out, char *bytes_out)
 {
