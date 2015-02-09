@@ -10,7 +10,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <time.h>
-
+#include <ctype.h>
 
 
 #define SOCKET_ERROR        -1
@@ -53,6 +53,7 @@ Must perform the above steps for a number of iterations specified by the Boss th
 char* ReadFile(char* fileAddress);
 void WriteToFile(char buffer[FILE_STORAGE_BUFFER_SIZE],char* filePath);
 char *substring(size_t start, size_t stop, const char *src, size_t size);
+char *substringV2(char *string, int position, int length);
 size_t explode(const char *delim, const char *str,char **pointers_out, char *bytes_out);
 //int DoWork(char *FILE_NAME, int hSocket);
 void *DoWorkThread(void* THREAD_ARGS);
@@ -114,12 +115,11 @@ struct client_params get_parameters(int num_args, char** arguments){
 
     struct client_params RETURN_PARAMS;
     RETURN_PARAMS.PARAM_PORT = 8888;
-    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 2;
+    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 100;
     RETURN_PARAMS.PARAM_SERVER_ADDRESS = "0.0.0.0";
-    RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = "workload-2.txt";
-    RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = 10;
+    RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = "workload-1.txt";
+    RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = 1000;
     RETURN_PARAMS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY = "PAYLOAD";
-
 
     int c;
 
@@ -145,6 +145,15 @@ struct client_params get_parameters(int num_args, char** arguments){
             case 'r':
                 RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = atoi(optarg);
                 break;
+            case '?':
+                if (optopt == 'c')
+                    fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+                else if (isprint (optopt))
+                    fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+                else
+                    fprintf (stderr,
+                            "Unknown option character `\\x%x'.\n",
+                            optopt);
             default:
                 abort ();
         }
@@ -220,6 +229,7 @@ int main(int argc, char **argv) {
 
 
         //------------------------WORKLOAD FILE DATA--------------------------
+        printf("\nWORKLOAD FILE NAME %s\n",WORKLOAD_FILE_NAME);
         printf("\nWORKLOAD FILE CONTENTS \"%s\"\n", WORKLOAD_FILE_CONTENTS);
         char **TARGET_FILE_POINTERS = malloc((256 * (sizeof(char))));
         char *BYTES_OUT = malloc((256 * (sizeof(char))));
@@ -410,21 +420,26 @@ int main(int argc, char **argv) {
                  printf("\nReceived \"%s\" from server\n", GET_FILE_RESPONSE);
                  printf("\n File to expect is size \"%s\"\n", GET_FILE_TOTAL_SIZE);
 
-                 global_metrics.bytes_sent += atoi(GET_FILE_TOTAL_SIZE);
+
 
                  //----#4------------PARSE REQUEST STATUS-----------------
-                 char *RESPONSE_STATUS = substring(8, 2, GET_FILE_RESPONSE, 3);
+                 //char *RESPONSE_STATUS = substring(8, 2, GET_FILE_RESPONSE, 3);
+                 char *RESPONSE_STATUS = substringV2(GET_FILE_RESPONSE,9,2);
+
                  printf("\nStatus of response is  \"%s\", read amount \"%ld\"\n", RESPONSE_STATUS, sizeof(RESPONSE_STATUS));
                  if (strcmp(RESPONSE_STATUS, "OK") != 0) {
                      printf("\nThere was an error!");
                      close(hSocket);
-                     return 0;
+                     //return 0;
                  }
 
                  //----#5------------CREATE DESTINATION PATH-------------
                  //file name already has /
 
+                 printf("\nDOWNLOAD DIRECTORY IS %s\n",arguments->download_directory);
+
                  char *FULL_FILE_PATH_TO_SAVE = malloc(256 * (sizeof(char)));
+                 FULL_FILE_PATH_TO_SAVE[0] = '\0';
                  strcat(FULL_FILE_PATH_TO_SAVE, arguments->download_directory);
                  strcat(FULL_FILE_PATH_TO_SAVE, FILE_NAME);
 
@@ -452,7 +467,7 @@ int main(int argc, char **argv) {
                      printf("\n Read Error \n");
                      printf("Errno %d %s\n", errno, strerror(errno));
                  }
-
+                 global_metrics.bytes_sent += bytesReceived;
 
                  //---------------CLOSE FILE---------
                  fclose(fp);
@@ -485,7 +500,7 @@ int main(int argc, char **argv) {
              }
 
 
-             pthread_join(threads[thread_id], NULL);
+             //pthread_join(threads[thread_id], NULL);
          }
          return 0;
      }
@@ -546,6 +561,37 @@ char *substring(size_t start, size_t stop, const char *src, size_t size)
     free(dst);
     return returnval;
 }
+
+char *substringV2(char *string, int position, int length)
+{
+    char *pointer;
+    int c;
+
+    pointer = malloc(length+1);
+
+    if (pointer == NULL)
+    {
+        printf("Unable to allocate memory.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for (c = 0 ; c < position -1 ; c++)
+        string++;
+
+    for (c = 0 ; c < length ; c++)
+    {
+        *(pointer+c) = *string;
+        string++;
+    }
+
+    *(pointer+c) = '\0';
+
+    return pointer;
+}
+
+
+
+
 size_t explode(const char *delim, const char *str, char **pointers_out, char *bytes_out)
 {
     size_t  delim_length        = strlen(delim);
