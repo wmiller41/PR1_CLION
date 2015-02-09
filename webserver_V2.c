@@ -18,7 +18,7 @@
 #define FILE_TRANSFER_BUFFER_SIZE 2048
 #define QUEUE_SIZE 1024
 
-#define WORKER_QUEUE_SIZE 1024
+#define WORKER_QUEUE_SIZE 5000
 
 
 //usage webserver[options]
@@ -270,13 +270,8 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
         char *strGetFileRequest = malloc(256 * sizeof(char));
         printf("\nI should be receiving a well formed Get File request.\n");
 
-
-
-
-        printf("size allocated for reading in is \"%ld\"", sizeof(strGetFileRequest));
         //----#1------------RECEIVE GETFILE REQUEST--------------
 
-        printf("\n\nis this hitting?\n\n");
         read(hSocket, strGetFileRequest, 256 * sizeof(char));
 
         printf("request %s",strGetFileRequest);
@@ -340,7 +335,7 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
             printf("\nReturning GetFile Response (\"%s\") to client\n", GET_FILE_RETURN);
             write(hSocket, GET_FILE_RETURN, 256 * sizeof(char));
 
-            printf("\nReturning File Size Character(\"%s\") Long(\"%ld\") to client\n", CHAR_FILE_SIZE, FILE_SIZE);
+            printf("\nReturning File Size Character(\"%s\")", CHAR_FILE_SIZE);
             write(hSocket, CHAR_FILE_SIZE, 256 * sizeof(char));
 
             //SEND FILE
@@ -360,14 +355,14 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
             long FILE_REMAINING = FILE_SIZE;
 
             while (FILE_REMAINING > 0) {
-                printf("Sending file...");
+               //printf("Sending file...");
                 //SIZE_SENT = sendfile(hSocket, fd, &offset,256);
                 SIZE_SENT = sendfile(hSocket, fd, NULL, FILE_SIZE);
                 FILE_REMAINING -= SIZE_SENT;
-                char log[300];
-                sprintf(log, "%d sent, %ld remains\n", SIZE_SENT, FILE_REMAINING);
-                WriteToFile(log, "SERVER-LOG.txt");
-                printf("%d sent, %ld remains\n", SIZE_SENT, FILE_REMAINING);
+                //char log[300];
+                //sprintf(log, "%d sent, %ld remains\n", SIZE_SENT, FILE_REMAINING);
+                //WriteToFile(log, "SERVER-LOG.txt");
+                //printf("%d sent, %ld remains\n", SIZE_SENT, FILE_REMAINING);
 
                 if (SIZE_SENT == -1) {
                     printf("something went wrong with sendfile()!...Errno %d %s\n", errno, strerror(errno));
@@ -417,20 +412,19 @@ options:
 -t number of worker threads (default :1, range 1-1000)
 -f path to static files (defailt: .)
 -h show help message
-
 */
     struct server_params RETURN_PARAMS;
 
     //set defaults
     RETURN_PARAMS.PARAM_PORT = 8888;
-    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 1;
+    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 5;
 
 
 
     int c;
 
     opterr = 0;
-    while ((c = getopt (num_args, arguments, "ptfh:")) != -1)
+    while ((c = getopt (num_args, arguments, "p:t:f:h")) != -1)
         switch (c)
         {
             case 'p':
@@ -443,8 +437,11 @@ options:
                 RETURN_PARAMS.PARAM_PATH = optarg;
                 break;
             case 'h':
+                printf("options:\n-p port (default: 8888)\n-t number of worker threads (default :1, range 1-1000)\n-f path to static files (default: .)\n-h show help message\n");
+
+
                 exit(1);
-                break;
+
             default:
                 abort ();
         }
@@ -553,23 +550,32 @@ void AddToEnd(struct server_worker_arg_queue *wq,struct server_worker_args wa){
     printf("\nINSIDE ADD TO END\n");
     // get array of worker queue, goto end, set it equal to the new set of arguments
     wq->worker_args_array[wq->NEXT_TO_ADD] = wa;
-    //if(wq->NEXT_TO_ADD == wq->SIZE)
-    //{
-        //wq->NEXT_TO_ADD = 0;
-    //}
-    //else
-    //{
 
-        printf("---ITEM ADDED SOCKED DESCRIPTOR %d IN ARRAY POS. %d--- NEXT TO REMOVE %d\n", wq->worker_args_array[wq->NEXT_TO_ADD].hsocket, wq->NEXT_TO_ADD, wq->NEXT_TO_REMOVE);
-    wq->NEXT_TO_ADD++;
-    //}
+    if(wq->NEXT_TO_ADD != WORKER_QUEUE_SIZE)
+    {
+        wq->NEXT_TO_ADD ++;
+    }
+    else {
+        wq->NEXT_TO_ADD = 0;
+    }
+    printf("---ITEM ADDED SOCKED DESCRIPTOR %d IN ARRAY POS. %d--- NEXT TO REMOVE %d \n", wq->worker_args_array[wq->NEXT_TO_ADD].hsocket, wq->NEXT_TO_ADD, wq->NEXT_TO_REMOVE);
 
-}
+    }
+
 struct server_worker_args RemoveFromFront(struct server_worker_arg_queue *wq){
 
     printf("\nINSIDE REMOVE FROM FRONT\n");
     int returnVal = wq->NEXT_TO_REMOVE;
-    wq->NEXT_TO_REMOVE++;
+
+    if(wq->NEXT_TO_REMOVE != WORKER_QUEUE_SIZE) {
+        printf("\nNEXT TO REMOVe DOES NOT EQUAL WORKER QUEUE SIZE\n");
+        wq->NEXT_TO_REMOVE ++;
+    }
+    else{
+        printf("\nNEXT TO REMOVe DOES EQUAL WORKER QUEUE SIZE\n");
+        wq->NEXT_TO_REMOVE = 0;
+    }
+
     printf("---ITEM REMOVED ARRAY ITEM NUMBER %d---\n",returnVal);
     return wq->worker_args_array[returnVal];
 }

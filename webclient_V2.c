@@ -75,20 +75,24 @@ struct worker_args_struct2 {
 };
 
 
-struct metrics{
-    float bytes_sent;
-    int total_msec;
-    int finished_files;
+struct boss_metrics{
     int t_start;
+    int total_msec;
     int t_end;
-
+    int total_files;
+    int total_bytes_sent;
 };
 
+struct thread_metrics{
+    float bytes_sent;
+    int finished_files;
+};
 
-struct metrics global_metrics;
+struct thread_metrics *global_thread_metrics;
+struct boss_metrics global_boss_metrics;
+
 
 pthread_t threads[100];
-
 /*
 options:
 -s server address (Default: 0.0.0.0)
@@ -115,16 +119,16 @@ struct client_params get_parameters(int num_args, char** arguments){
 
     struct client_params RETURN_PARAMS;
     RETURN_PARAMS.PARAM_PORT = 8888;
-    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 100;
+    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 50;
     RETURN_PARAMS.PARAM_SERVER_ADDRESS = "0.0.0.0";
-    RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = "workload-1.txt";
-    RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = 1000;
+    RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = "workload.txt";
+    RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = 5;
     RETURN_PARAMS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY = "PAYLOAD";
 
     int c;
 
     opterr = 0;
-    while ((c = getopt (num_args, arguments, "ptfh:")) != -1)
+    while ((c = getopt (num_args, arguments, "p:t:w:s:d:r:h")) != -1)
         switch (c)
         {
             case 'p':
@@ -135,15 +139,23 @@ struct client_params get_parameters(int num_args, char** arguments){
                 break;
             case 'w':
                 RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = optarg;
+                printf("OPTARG: %s\n",optarg);
+                printf("\nW flag hit,workload file is %s \n",RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE);
                 break;
             case 's':
                 RETURN_PARAMS.PARAM_SERVER_ADDRESS = optarg;
                 break;
             case 'd':
-                RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = optarg;
+                RETURN_PARAMS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY = optarg;
                 break;
             case 'r':
                 RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = atoi(optarg);
+                printf("\nr flag hit, sending %d requests\n",RETURN_PARAMS.PARAM_NUM_OF_REQUESTS);
+                break;
+            case 'h':
+            printf("usage:\nwebclient [options]\noptions:\n-s server address (Default: 0.0.0.0)\n-p server port (Default: 8888)\n-t number of worker threads (Default: 1, Range: 1-100)\n-w path to workload file (Default: workload.txt)\n-d path to downloaded file directory (Default: null)\n-r number of total requests (Default: 10, Range: 1-1000)\n");
+
+                abort();
                 break;
             case '?':
                 if (optopt == 'c')
@@ -154,8 +166,8 @@ struct client_params get_parameters(int num_args, char** arguments){
                     fprintf (stderr,
                             "Unknown option character `\\x%x'.\n",
                             optopt);
-            default:
-                abort ();
+            //default:
+                //abort ();
         }
 
 
@@ -179,42 +191,48 @@ int NUM_WORKER_THREADS;
 
 int main(int argc, char **argv) {
 
-        clock_t start,end;
-
-
-        global_metrics.bytes_sent = 0;
-        global_metrics.finished_files = 0;
-        global_metrics.total_msec = 0;
-        global_metrics.t_start = 0;
-        global_metrics.t_end = 0;
-
-
-
-
-        DOWNLOAD_DIRECTORY = malloc(256 * sizeof(char));
-
         printf("------WEB CLIENT STARTED-----\n");
 
+        DOWNLOAD_DIRECTORY = malloc(256 * sizeof(char));
         DOWNLOAD_DIRECTORY[0] = '\0';
         //place in folder
 
         //if (argc < 3) {
-            //printf("\nUsage: client host-name host-port\n");
-            //return 0;
+        //printf("\nUsage: client host-name host-port\n");
+        //return 0;
         //}
         //else {
-            // get parameters
-            PARAMETERS = get_parameters(argc,argv);
-            // assign parameters
-            strcpy(strHostName,PARAMETERS.PARAM_SERVER_ADDRESS);
-            nHostPort = PARAMETERS.PARAM_PORT;
-            WORKLOAD_FILE_NAME = PARAMETERS.PARAM_PATH_TO_WORKLOAD_FILE;
-            NUM_REQUESTS = PARAMETERS.PARAM_NUM_OF_REQUESTS;
-            DOWNLOAD_DIRECTORY = PARAMETERS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY;
-            NUM_WORKER_THREADS = PARAMETERS.PARAM_NUM_WORKER_THREADS;
-            printf("NUM WORKER THREADS %d \n",NUM_WORKER_THREADS);
-       // }
+        // get parameters
+        PARAMETERS = get_parameters(argc,argv);
+        // assign parameters
+        strcpy(strHostName,PARAMETERS.PARAM_SERVER_ADDRESS);
+        nHostPort = PARAMETERS.PARAM_PORT;
+        WORKLOAD_FILE_NAME = PARAMETERS.PARAM_PATH_TO_WORKLOAD_FILE;
+        NUM_REQUESTS = PARAMETERS.PARAM_NUM_OF_REQUESTS;
+        DOWNLOAD_DIRECTORY = PARAMETERS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY;
+        NUM_WORKER_THREADS = PARAMETERS.PARAM_NUM_WORKER_THREADS;
+        printf("NUM WORKER THREADS %d \n",NUM_WORKER_THREADS);
+        // }
 
+        //METRICS
+        clock_t start,end;
+
+        global_boss_metrics.total_bytes_sent = 0;
+        global_boss_metrics.total_files = 0;
+        global_boss_metrics.total_msec = 0;
+        global_boss_metrics.t_start = 0;
+        global_boss_metrics.t_end = 0;
+
+        //create metrics array
+        global_thread_metrics = malloc(sizeof(struct thread_metrics) * NUM_WORKER_THREADS);
+
+        //initialize
+        int i = 0;
+        for(i = 0; i < NUM_WORKER_THREADS; i++)
+        {
+            global_thread_metrics[i].bytes_sent = 0;
+            global_thread_metrics[i].finished_files = 0;
+        }
 
         /*---TO DO---*/
 
@@ -238,6 +256,13 @@ int main(int argc, char **argv) {
 
         free(WORKLOAD_FILE_CONTENTS);
 
+        //LIMIT THE NUMBER OF THREADS TO REQUESTS...
+        // WE WON'T NEED MORE THAN # of THREADS
+        if(NUM_WORKER_THREADS > NUM_REQUESTS)
+        {
+            NUM_WORKER_THREADS = NUM_REQUESTS;
+        }
+
         struct worker_args_struct2 MASTER_ARGS_ARRAY[NUM_WORKER_THREADS];
         //struct worker_args_struct MASTER_ARGS_ARRAY = malloc(sizeof(struct worker_args_struct)*NUM_WORKER_THREADS);
 
@@ -249,14 +274,14 @@ int main(int argc, char **argv) {
         }
          //----------------------FILL EACH ITER IN MASTER_ARGS_ARRAY WITH R/T REQUESTS FROM MASTER_FILE_ARRAY-----------------
         //---------ONE ITER PER THREAD-----------
-        int i = 0;
+        i = 0;
         int FILE_ARRAY_COUNTER = 0;
         for (i = 0; i < NUM_WORKER_THREADS; i++) {
             printf("INSIDE LOOP FOR THREAD %d\n",i);
             int x = 0;
             MASTER_ARGS_ARRAY[i].file_paths_size = 0;
             for (x = 0; x < (NUM_REQUESTS/NUM_WORKER_THREADS); x++) {
-                printf("x is %d\n",x);
+                //printf("x is %d\n",x);
                 MASTER_ARGS_ARRAY[i].file_paths[x] = MASTER_FILE_ARRAY[FILE_ARRAY_COUNTER];
                 MASTER_ARGS_ARRAY[i].file_paths_size++;
                 printf("\nTHREAD %d ASSIGNED MASTER ARG ARRAY ITER %d,MASTER FILE %d,FILE PATH NUM %d, FILE PATH %s, WHICH CURRENTLY HAS %d ITEMS\n",
@@ -268,50 +293,55 @@ int main(int argc, char **argv) {
         // i guess we will start clock here?
 
         start = clock();
-        global_metrics.t_start = start;
+        global_boss_metrics.t_start = start;
 
 
-        int turn_off = 0;
-        if(turn_off != 1) {
-            //-------1 SOCKET PER THREAD---------
-            for (i = 0; i < NUM_WORKER_THREADS; i++) {
-                //-----------------THREAD STUFF-----------------
-                int rc;
-                long t = i;
-                //-----FINISH PARAMS FOR THREAD-----
-                //struct worker_args_struct current_thread_args = MASTER_ARGS_ARRAY[i];
-                int x;
-                for(x = 0; x <= MASTER_ARGS_ARRAY[i].file_paths_size; x++) {
-                    printf("\n INSIDE BOSS: ITER %d FILE NEAME IS %s",x,MASTER_ARGS_ARRAY[i].file_paths[x]);
-                }
 
-                MASTER_ARGS_ARRAY[i].thread_id = t;
-                MASTER_ARGS_ARRAY[i].download_directory = PARAMETERS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY;
-
-                printf("THREAD ARG ID FOR THREAD %ld is %d \n", t, MASTER_ARGS_ARRAY[i].thread_id);
-
-                printf("\nIn file loop: creating thread %ld\n", t);
-                rc = pthread_create(&threads[t], NULL, DoWorkThread, (void *) &MASTER_ARGS_ARRAY[i]);
-                if (rc) {
-                    printf("\nERROR; return code from pthread_create() is %d\n", rc);
-                    exit(-1);
-                }
-
+        for (i = 0; i < NUM_WORKER_THREADS; i++) {
+            //-----------------THREAD STUFF-----------------
+            int rc;
+            long t = i;
+            //struct worker_args_struct current_thread_args = MASTER_ARGS_ARRAY[i];
+            int x;
+            for(x = 0; x <= MASTER_ARGS_ARRAY[i].file_paths_size; x++) {
+                printf("\n INSIDE BOSS: ITER %d FILE NAME IS %s",x,MASTER_ARGS_ARRAY[i].file_paths[x]);
             }
-            // clean up and join
-            int iter;
-            for (iter = 0; iter < NUM_WORKER_THREADS; iter++) {
-                //try to rejoin main thread in worker function
-                //free(MASTER_ARGS_ARRAY->file_paths[iter]);
-                pthread_join(threads[iter], NULL);
+            MASTER_ARGS_ARRAY[i].thread_id = t;
+            MASTER_ARGS_ARRAY[i].download_directory = PARAMETERS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY;
+
+            printf("THREAD ARG ID FOR THREAD %ld is %d \n", t, MASTER_ARGS_ARRAY[i].thread_id);
+
+            printf("\nCreating thread %ld\n", t);
+            rc = pthread_create(&threads[t], NULL, DoWorkThread, (void *) &MASTER_ARGS_ARRAY[i]);
+            if (rc) {
+                printf("\nERROR; return code from pthread_create() is %d\n", rc);
+                exit(-1);
             }
 
-
+        }
+        // clean up and join
+        int iter;
+        for (iter = 0; iter < NUM_WORKER_THREADS; iter++) {
+            //try to rejoin main thread in worker function
+            //free(MASTER_ARGS_ARRAY->file_paths[iter]);
+            pthread_join(threads[iter], NULL);
         }
 
         end = clock();
-        global_metrics.t_end = end;
-        global_metrics.total_msec = global_metrics.t_end - global_metrics.t_start;
+        global_boss_metrics.t_end = end;
+
+
+        i=0;
+        for(i=0;i < NUM_WORKER_THREADS;i++){
+            global_boss_metrics.total_bytes_sent += global_thread_metrics[i].bytes_sent;
+            global_boss_metrics.total_files += global_thread_metrics[i].finished_files;
+        }
+
+        global_boss_metrics.total_msec = global_boss_metrics.t_end - global_boss_metrics.t_start;
+
+
+
+
     //_start: time after worker threads created, but before any of them starts sending requests
     //t_end: time when all worker threads receive all responses
     //total time elapsed: t_end - t_start
@@ -319,13 +349,16 @@ int main(int argc, char **argv) {
     //avg throughput: (total bytes received) / (total_time_elapsed)
             //avg response time: (sum of all pre-request-response-time) / (total number of requests)
 
-    printf("START: %d\n",global_metrics.t_start);
-    printf("END: %d\n",global_metrics.t_end);
-    printf("TOTAL TIME ELAPSED: %d\n",global_metrics.total_msec);
-    printf("TOTAL BYTES RECEIVED: %f\n",global_metrics.bytes_sent);
-    printf("AVG. RESPONSE TIME : %f\n",(global_metrics.total_msec/global_metrics.bytes_sent));
-    printf("AVG. THROUGHPUT: %f\n",(global_metrics.bytes_sent/global_metrics.total_msec));
-    printf("FILES FINISHED: %d\n",global_metrics.finished_files);
+    printf("START: %d\n",global_boss_metrics.t_start);
+    printf("END: %d\n",global_boss_metrics.t_end);
+    printf("TOTAL TIME ELAPSED: %d\n",global_boss_metrics.total_msec);
+    printf("TOTAL BYTES RECEIVED: %d\n",global_boss_metrics.total_bytes_sent);
+    printf("AVG. RESPONSE TIME : %d\n",(global_boss_metrics.total_msec/global_boss_metrics.total_bytes_sent));
+    printf("AVG. THROUGHPUT: %d\n",(global_boss_metrics.total_bytes_sent/global_boss_metrics.total_msec));
+    printf("FILES FINISHED: %d\n",global_boss_metrics.total_files);
+
+
+    free(global_thread_metrics);
 
     return 0;
 
@@ -338,8 +371,8 @@ int main(int argc, char **argv) {
          struct worker_args_struct2 *arguments;
          arguments = (struct worker_args_struct2*) THREAD_ARGS;
 
-         int workload_amt = (NUM_REQUESTS/NUM_WORKER_THREADS);
-         printf("workload amt is %d\n",workload_amt);
+         //int workload_amt = (NUM_REQUESTS/NUM_WORKER_THREADS);
+         //printf("workload amt is %d\n",workload_amt);
 
          int thread_id = arguments->thread_id;
 
@@ -350,8 +383,6 @@ int main(int argc, char **argv) {
 
                  char *FILE_NAME = arguments->file_paths[i];
 
-
-                 printf("dat file name tho (in thread:) %s \n", arguments->file_paths[i]);
                  //printf("download dir (in thread:) %s \n\n",arguments->download_directory);
                  //printf("dile path size tho (in thread:) %d \n\n",arguments->file_paths_size);
                  //printf("thread id tho (in thread:) %d \n\n",arguments->thread_id);
@@ -436,8 +467,6 @@ int main(int argc, char **argv) {
                  //----#5------------CREATE DESTINATION PATH-------------
                  //file name already has /
 
-                 printf("\nDOWNLOAD DIRECTORY IS %s\n",arguments->download_directory);
-
                  char *FULL_FILE_PATH_TO_SAVE = malloc(256 * (sizeof(char)));
                  FULL_FILE_PATH_TO_SAVE[0] = '\0';
                  strcat(FULL_FILE_PATH_TO_SAVE, arguments->download_directory);
@@ -467,7 +496,10 @@ int main(int argc, char **argv) {
                      printf("\n Read Error \n");
                      printf("Errno %d %s\n", errno, strerror(errno));
                  }
-                 global_metrics.bytes_sent += bytesReceived;
+
+                 printf("updating thread %d metrics\n",arguments->thread_id);
+                 global_thread_metrics[arguments->thread_id].bytes_sent = atoi(GET_FILE_TOTAL_SIZE);
+                 global_thread_metrics[arguments->thread_id].finished_files ++;
 
                  //---------------CLOSE FILE---------
                  fclose(fp);
@@ -493,9 +525,12 @@ int main(int argc, char **argv) {
                  free(GET_FILE_RESPONSE);
                  free(GET_FILE_TOTAL_SIZE);
                  //free(arguments->file_paths[arguments->thread_id]);
-                 global_metrics.finished_files ++;
 
-                 printf("METRICS: FILES CURRENTLY FINISHED: %d\n",global_metrics.finished_files);
+
+                 printf("METRICS: FILES CURRENTLY FINISHED BY THREAD: %d\n", global_thread_metrics[arguments->thread_id].finished_files);
+
+
+
 
              }
 
