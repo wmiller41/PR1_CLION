@@ -136,7 +136,12 @@ struct client_params get_parameters(int num_args, char** arguments){
                 break;
             case 't':
                 RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = atoi(optarg);
-                break;
+                if((RETURN_PARAMS.PARAM_NUM_WORKER_THREADS > 100) || (RETURN_PARAMS.PARAM_NUM_WORKER_THREADS < 1)){
+                    printf("-t must be between 1 and 100\n");
+                    abort();
+                }else {
+                    break;
+                }
             case 'w':
                 RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = optarg;
                 printf("OPTARG: %s\n",optarg);
@@ -150,8 +155,14 @@ struct client_params get_parameters(int num_args, char** arguments){
                 break;
             case 'r':
                 RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = atoi(optarg);
-                printf("\nr flag hit, sending %d requests\n",RETURN_PARAMS.PARAM_NUM_OF_REQUESTS);
-                break;
+                if((RETURN_PARAMS.PARAM_NUM_OF_REQUESTS > 1000)||(RETURN_PARAMS.PARAM_NUM_OF_REQUESTS < 1)){
+                    printf("-r must be between 1 and 1000\n");
+                    abort();
+                }
+                else {
+                    printf("\nr flag hit, sending %d requests\n", RETURN_PARAMS.PARAM_NUM_OF_REQUESTS);
+                    break;
+                }
             case 'h':
             printf("usage:\nwebclient [options]\noptions:\n-s server address (Default: 0.0.0.0)\n-p server port (Default: 8888)\n-t number of worker threads (Default: 1, Range: 1-100)\n-w path to workload file (Default: workload.txt)\n-d path to downloaded file directory (Default: null)\n-r number of total requests (Default: 10, Range: 1-1000)\n");
 
@@ -290,29 +301,33 @@ int main(int argc, char **argv) {
             }
         }
 
-        // i guess we will start clock here?
 
-        start = clock();
-        global_boss_metrics.t_start = start;
+
+        // i guess we will start clock here?
 
 
 
         for (i = 0; i < NUM_WORKER_THREADS; i++) {
             //-----------------THREAD STUFF-----------------
-            int rc;
-            long t = i;
+
+
             //struct worker_args_struct current_thread_args = MASTER_ARGS_ARRAY[i];
             int x;
-            for(x = 0; x <= MASTER_ARGS_ARRAY[i].file_paths_size; x++) {
-                printf("\n INSIDE BOSS: ITER %d FILE NAME IS %s",x,MASTER_ARGS_ARRAY[i].file_paths[x]);
+            for (x = 0; x <= MASTER_ARGS_ARRAY[i].file_paths_size; x++) {
+                printf("\n INSIDE BOSS: ITER %d FILE NAME IS %s", x, MASTER_ARGS_ARRAY[i].file_paths[x]);
             }
-            MASTER_ARGS_ARRAY[i].thread_id = t;
+            MASTER_ARGS_ARRAY[i].thread_id = i;
             MASTER_ARGS_ARRAY[i].download_directory = PARAMETERS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY;
+        }
+        start = clock();
+        global_boss_metrics.t_start = start;
 
-            printf("THREAD ARG ID FOR THREAD %ld is %d \n", t, MASTER_ARGS_ARRAY[i].thread_id);
+        for (i = 0; i < NUM_WORKER_THREADS; i++) {
+            int rc;
+            printf("THREAD ARG ID FOR THREAD %d is %d \n", i, MASTER_ARGS_ARRAY[i].thread_id);
 
-            printf("\nCreating thread %ld\n", t);
-            rc = pthread_create(&threads[t], NULL, DoWorkThread, (void *) &MASTER_ARGS_ARRAY[i]);
+            printf("\nCreating thread %d\n", i);
+            rc = pthread_create(&threads[i], NULL, DoWorkThread, (void *) &MASTER_ARGS_ARRAY[i]);
             if (rc) {
                 printf("\nERROR; return code from pthread_create() is %d\n", rc);
                 exit(-1);
@@ -349,13 +364,30 @@ int main(int argc, char **argv) {
     //avg throughput: (total bytes received) / (total_time_elapsed)
             //avg response time: (sum of all pre-request-response-time) / (total number of requests)
 
-    printf("START: %d\n",global_boss_metrics.t_start);
-    printf("END: %d\n",global_boss_metrics.t_end);
-    printf("TOTAL TIME ELAPSED: %d\n",global_boss_metrics.total_msec);
-    printf("TOTAL BYTES RECEIVED: %d\n",global_boss_metrics.total_bytes_sent);
-    printf("AVG. RESPONSE TIME : %d\n",(global_boss_metrics.total_msec/global_boss_metrics.total_bytes_sent));
-    printf("AVG. THROUGHPUT: %d\n",(global_boss_metrics.total_bytes_sent/global_boss_metrics.total_msec));
-    printf("FILES FINISHED: %d\n",global_boss_metrics.total_files);
+
+    double difference = global_boss_metrics.t_end - global_boss_metrics.t_start;
+    double runtime_millis = ((difference / CLOCKS_PER_SEC) * 1000);
+    double runtime_sec = (difference /CLOCKS_PER_SEC);
+
+
+    printf("-----------METRICS-----------");
+
+
+    printf("DIFFERENCE %f", difference);
+
+
+
+
+    printf("START: %d cycles \n",global_boss_metrics.t_start);
+    printf("END: %d cycles \n",global_boss_metrics.t_end);
+    printf("TOTAL TIME ELAPSED: %f (ms) %f (s) \n",runtime_millis,runtime_sec);
+    printf("TOTAL BYTES RECEIVED: %d (B) \n",global_boss_metrics.total_bytes_sent);
+    printf("AVG. RESPONSE TIME : %f (ms/B)\n",
+            (runtime_millis/global_boss_metrics.total_bytes_sent));
+    printf("AVG. THROUGHPUT: %f (B/ms)\n",
+            (global_boss_metrics.total_bytes_sent/runtime_millis));
+    printf("FILES FINISHED: %d\n",
+            global_boss_metrics.total_files);
 
 
     free(global_thread_metrics);
@@ -535,7 +567,7 @@ int main(int argc, char **argv) {
              }
 
 
-             //pthread_join(threads[thread_id], NULL);
+             pthread_join(threads[thread_id], NULL);
          }
          return 0;
      }
