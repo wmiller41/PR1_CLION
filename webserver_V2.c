@@ -1,24 +1,9 @@
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <sys/sendfile.h>
-#include <errno.h>
-#include <pthread.h>
 
 
 
-#define SOCKET_ERROR -1
-#define FILE_STORAGE_BUFFER_SIZE 15000000
-#define FILE_TRANSFER_BUFFER_SIZE 2048
-#define QUEUE_SIZE 1024
+#include "helpers.h"
 
-#define WORKER_QUEUE_SIZE 5000
 
 
 //usage webserver[options]
@@ -49,43 +34,25 @@ The web server must satisfy the following requirements:
 */
 
 
-void FillAddress(struct sockaddr_in *Address,int nHostPort);
-char* ReadFile(char* fileAddress, long *fileSize);
-int CreateServerSocket(int *hServerSocket);
-char *substring(size_t start, size_t stop, const char *src, size_t size);
-void WriteToFile(char buffer[FILE_STORAGE_BUFFER_SIZE],char* filePath);
+
 void *DoServerWorkThread(void* THREAD_ARGS);
 
 
-struct server_worker_args {
-    int hsocket;
-};
-
-struct server_worker_arg_queue
-{
-    struct server_worker_args worker_args_array[WORKER_QUEUE_SIZE];
-    int NEXT_TO_ADD;
-    int NEXT_TO_REMOVE;
-    int SIZE;
-};
+;
 
 struct server_worker_arg_queue GLOBAL_WORKER_QUEUE;
 pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t c_work = PTHREAD_COND_INITIALIZER;
 pthread_cond_t c_boss = PTHREAD_COND_INITIALIZER;
 
-struct server_params{
-    int PARAM_PORT;
-    int PARAM_NUM_WORKER_THREADS;
-    char* PARAM_PATH;
-};
+
 
 struct server_params PARAMETERS;
 struct server_params get_parameters(int num_args, char** arguments);
 
-void InitializeQueue(struct server_worker_arg_queue *wq);
-void AddToEnd(struct server_worker_arg_queue *wq,struct server_worker_args wa);
-struct server_worker_args RemoveFromFront(struct server_worker_arg_queue *wq);
+
+
+
 
 
 int main(int argc, char **argv) {
@@ -293,7 +260,8 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
         char *strFileName = malloc(256 * sizeof(char));
         strFileName[0] = '\0';
         strcat(strFileName,PARAMETERS.PARAM_PATH);
-        strcat(strFileName,substring(13, 1000, strGetFileRequest, (256 * sizeof(char))));
+        //strcat(strFileName,substring(13, 1000, strGetFileRequest, (256 * sizeof(char))));
+        strcat(strFileName,substring(strGetFileRequest,14,1000));
 
         printf("\nFile name is \"%s\"", strFileName);
 
@@ -320,7 +288,7 @@ void *DoServerWorkThread(void* THREAD_ARGS) {
             //strcpy(STORAGE_BUFFER,strWorkLoadFileName);
             printf("\nReading file and getting file size\n");
 
-            strcpy(STORAGE_BUFFER, ReadFile(strFileName, &FILE_SIZE));
+            strcpy(STORAGE_BUFFER, ReadFile_wSize(strFileName, &FILE_SIZE));
 
             //TURN FILE SIZE INTO STRING
             char *CHAR_FILE_SIZE = malloc((256 * (sizeof(char))));
@@ -458,149 +426,9 @@ options:
 
 
 
-void FillAddress(struct sockaddr_in *Address,int nHostPort) {
-	//FILL ADDRESS STRUCTURE
-	printf("\ncreating address...\n");
-	Address->sin_addr.s_addr=INADDR_ANY;
-	//google what INADDR_ANY is...basically tells to not worry about address
-	Address->sin_port=htons(nHostPort);
-	//hook onto port passed by parameter
-	Address->sin_family=AF_INET;
-	//ipv4
-}
-char* ReadFile(char* fileAddress, long *fileSize){
-
-	char *buffer;
-	FILE *fh = fopen(fileAddress, "rb");
-	if ( fh != NULL )
-	{
-		fseek(fh, 0L, SEEK_END);
-		long s = ftell(fh);
-        *fileSize = s;
-		rewind(fh);
-
-		buffer = malloc(s);
-		if ( buffer != NULL )
-		{
-			fread(buffer, s, 1, fh);
-			// we can now close the file
-			fclose(fh); fh = NULL;
-
-			// do something, e.g.
-			//fwrite(buffer, s, 1, stdout);
-			//free(buffer);
-		}
-		if (fh != NULL) fclose(fh);
-	}
-
-	return buffer;
-}
-int CreateServerSocket(int *hServerSocket){
-
-	*hServerSocket = socket(AF_INET,SOCK_STREAM,0);
-	//socket() function creates a socket and returns a descriptor
-	//which can be passed to other functions
-	// AF_INET - address family (ipv4)
-	// SOCK_STREAM - TCP....SOCK_DGRAM is UDP
-	// 0 - designates IP Protocol
-	//socket error is just -1
-	if(*hServerSocket == SOCKET_ERROR)
-	{
-		return 0;
-	}
-	else
-	{
-		return 1;
-	}
-}
-char *substring(size_t start, size_t stop, const char *src, size_t size)
-{
-	//char dst[size];
-	char* dst = malloc(size * sizeof(char));
-
-	int count = stop - start;
-	if ( count >= --size )
-	{
-		count = size;
-	}
-	sprintf(dst, "%.*s", count, src + start);
-	return dst;
-}
-void WriteToFile(char buffer[FILE_STORAGE_BUFFER_SIZE],char* filePath)
-{
-    FILE *fptr;
-    //char* filePath = "payload.txt";
-    fptr = fopen(filePath,"a+");
-    fprintf(fptr,"%s",buffer);
-    fclose(fptr);
-}
-
-
 //----------QUEUE HELPERS----------
 
 
-void InitializeQueue(struct server_worker_arg_queue *wq){
-    wq->NEXT_TO_ADD = 0;
-    wq->NEXT_TO_REMOVE = 0;
-    wq->SIZE = WORKER_QUEUE_SIZE;
-    printf("---QUEUE INITALIZED----");
-}
-void AddToEnd(struct server_worker_arg_queue *wq,struct server_worker_args wa){
-
-    printf("\nINSIDE ADD TO END\n");
-    // get array of worker queue, goto end, set it equal to the new set of arguments
-    wq->worker_args_array[wq->NEXT_TO_ADD] = wa;
-
-    if(wq->NEXT_TO_ADD != WORKER_QUEUE_SIZE)
-    {
-        wq->NEXT_TO_ADD ++;
-    }
-    else {
-        wq->NEXT_TO_ADD = 0;
-    }
-    printf("---ITEM ADDED SOCKED DESCRIPTOR %d IN ARRAY POS. %d--- NEXT TO REMOVE %d \n", wq->worker_args_array[wq->NEXT_TO_ADD].hsocket, wq->NEXT_TO_ADD, wq->NEXT_TO_REMOVE);
-
-    }
-
-struct server_worker_args RemoveFromFront(struct server_worker_arg_queue *wq){
-
-    printf("\nINSIDE REMOVE FROM FRONT\n");
-    int returnVal = wq->NEXT_TO_REMOVE;
-
-    if(wq->NEXT_TO_REMOVE != WORKER_QUEUE_SIZE) {
-        printf("\nNEXT TO REMOVe DOES NOT EQUAL WORKER QUEUE SIZE\n");
-        wq->NEXT_TO_REMOVE ++;
-    }
-    else{
-        printf("\nNEXT TO REMOVe DOES EQUAL WORKER QUEUE SIZE\n");
-        wq->NEXT_TO_REMOVE = 0;
-    }
-
-    printf("---ITEM REMOVED ARRAY ITEM NUMBER %d---\n",returnVal);
-    return wq->worker_args_array[returnVal];
-}
 
 
 
-/*--- FOR REFERENCE---
-//EACH THREAD GETS ONE OF THESE!!!
-struct server_worker_args{
-    int hsocket;
-    int thread_id;
-};
-
-// THIS QUEUE IS SHARED BY ALL THREADS!!!!!!!!!
-// ONLY 1 WORKER QUEUE!!!!!!!!!!!!!!!
-struct server_worker_arg_queue
-{
-    //INDIVIDUAL CONNECTIONS
-    struct server_worker_args worker_args_array[1024];
-
-    //INFO ABOUT WHERE WE ARE IN THE QUEUE
-
-    int NEXT_TO_ADD;
-    int NEXT_TO_REMOVE;
-};
-
-
- */

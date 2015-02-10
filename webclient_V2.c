@@ -1,96 +1,5 @@
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <errno.h>
-#include <pthread.h>
-#include <time.h>
-#include <ctype.h>
 
-
-#define SOCKET_ERROR        -1
-#define FILE_STORAGE_BUFFER_SIZE 15000000
-#define FILE_TRANSFER_BUFFER_SIZE 2048
-#define HOST_NAME_SIZE      255
-
-
-/*
-Client Requirements
-The client must satisfy the following requirements:
-        Must be implemented using the Boss-Worker thread pattern
-        Must spawn a pool of worker threads which will make GetFile requests
-        Must have a queue mechanism for communication between the boss and worker threads
-        Must create a workload for the server
-Must collect and compute the following metrics and write them to a file
-        Total bytes received units here [B]
-Average response time units here [s]
-Average throughput [B/s]
-The client must generate a workload as follows:
-The client must generate a total number of requests (R)
-R should be uniformly distributed all worker threads (T) such that each worker performs approximately R/T requests
-The client must request files specified in a workflow file
-The workflow file must contain 1 or more filenames (ex: /myfile.html)
-The workflow file must support up to 100 unique filenames
-Filenames will be no longer than 200 characters
-        Each filename should be on a separate line
-        For each request, filenames will be assigned to the worker, either randomly or in a round robin manner.
-The worker threads must satisfy the following requirements:
-Must create socket and connect to an accepting server
-        Must send request, receive response, and then close connection with the server
-        If a download directory is specified at the command line, then the worker must take the response (file) and write the file to the download directory
-If the download directory is specified as null, then the response data may be discarded
-Must perform the above steps for a number of iterations specified by the Boss thread
-        Must communicate metrics back to Boss thread
-*/
-
-
-
-char* ReadFile(char* fileAddress);
-void WriteToFile(char buffer[FILE_STORAGE_BUFFER_SIZE],char* filePath);
-char *substring(size_t start, size_t stop, const char *src, size_t size);
-char *substringV2(char *string, int position, int length);
-size_t explode(const char *delim, const char *str,char **pointers_out, char *bytes_out);
-//int DoWork(char *FILE_NAME, int hSocket);
-void *DoWorkThread(void* THREAD_ARGS);
-
-//struct worker_args_struct {
-    //char* file_name;
-    //int thread_id;
-    //char* download_directory;
-    //int file_paths_size;
-    //char** file_paths;
-//};
-
-struct worker_args_struct2 {
-    //char* file_name;
-    int thread_id;
-    char* download_directory;
-    int file_paths_size;
-    char* file_paths[1024];
-};
-
-
-struct boss_metrics{
-    int t_start;
-    int total_msec;
-    int t_end;
-    int total_files;
-    int total_bytes_sent;
-};
-
-struct thread_metrics{
-    float bytes_sent;
-    int finished_files;
-};
-
-struct thread_metrics *global_thread_metrics;
-struct boss_metrics global_boss_metrics;
-
+#include "helpers.h"
 
 pthread_t threads[100];
 /*
@@ -103,26 +12,21 @@ options:
 -r number of total requests (Default: 10, Range: 1-1000)
 */
 
-struct client_params{
-    char* PARAM_SERVER_ADDRESS;
-    int PARAM_PORT;
-    int PARAM_NUM_WORKER_THREADS;
-    char* PARAM_PATH_TO_WORKLOAD_FILE;
-    char* PARAM_PATH_TO_DOWNLOAD_DIRECTORY;
-    int PARAM_NUM_OF_REQUESTS;
-};
 
+struct thread_metrics *global_thread_metrics;
+struct boss_metrics global_boss_metrics;
 struct client_params PARAMETERS;
+
 struct client_params get_parameters(int num_args, char** arguments);
 struct client_params get_parameters(int num_args, char** arguments){
 
 
     struct client_params RETURN_PARAMS;
     RETURN_PARAMS.PARAM_PORT = 8888;
-    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 50;
+    RETURN_PARAMS.PARAM_NUM_WORKER_THREADS = 1;
     RETURN_PARAMS.PARAM_SERVER_ADDRESS = "0.0.0.0";
     RETURN_PARAMS.PARAM_PATH_TO_WORKLOAD_FILE = "workload.txt";
-    RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = 5;
+    RETURN_PARAMS.PARAM_NUM_OF_REQUESTS = 10;
     RETURN_PARAMS.PARAM_PATH_TO_DOWNLOAD_DIRECTORY = "PAYLOAD";
 
     int c;
@@ -199,6 +103,8 @@ char *WORKLOAD_FILE_NAME;
 char *FILE_NAME;
 char *DOWNLOAD_DIRECTORY;
 int NUM_WORKER_THREADS;
+
+void *DoWorkThread(void* THREAD_ARGS);
 
 int main(int argc, char **argv) {
 
@@ -346,7 +252,7 @@ int main(int argc, char **argv) {
         global_boss_metrics.t_end = end;
 
 
-        i=0;
+
         for(i=0;i < NUM_WORKER_THREADS;i++){
             global_boss_metrics.total_bytes_sent += global_thread_metrics[i].bytes_sent;
             global_boss_metrics.total_files += global_thread_metrics[i].finished_files;
@@ -395,10 +301,7 @@ int main(int argc, char **argv) {
     return 0;
 
     }
-
-
-     //int DoWork(char *FILE_NAME, int hSocket) {
-     void *DoWorkThread(void* THREAD_ARGS){
+void *DoWorkThread(void* THREAD_ARGS){
 
          struct worker_args_struct2 *arguments;
          arguments = (struct worker_args_struct2*) THREAD_ARGS;
@@ -487,7 +390,7 @@ int main(int argc, char **argv) {
 
                  //----#4------------PARSE REQUEST STATUS-----------------
                  //char *RESPONSE_STATUS = substring(8, 2, GET_FILE_RESPONSE, 3);
-                 char *RESPONSE_STATUS = substringV2(GET_FILE_RESPONSE,9,2);
+                 char *RESPONSE_STATUS = substring(GET_FILE_RESPONSE,9,2);
 
                  printf("\nStatus of response is  \"%s\", read amount \"%ld\"\n", RESPONSE_STATUS, sizeof(RESPONSE_STATUS));
                  if (strcmp(RESPONSE_STATUS, "OK") != 0) {
@@ -501,15 +404,20 @@ int main(int argc, char **argv) {
 
                  char *FULL_FILE_PATH_TO_SAVE = malloc(256 * (sizeof(char)));
                  FULL_FILE_PATH_TO_SAVE[0] = '\0';
-                 strcat(FULL_FILE_PATH_TO_SAVE, arguments->download_directory);
-                 strcat(FULL_FILE_PATH_TO_SAVE, FILE_NAME);
-
+                 //if((strlen(arguments->download_directory)) != 0){
+                     strcat(FULL_FILE_PATH_TO_SAVE, arguments->download_directory);
+                     strcat(FULL_FILE_PATH_TO_SAVE, FILE_NAME);
+                 //
+                 //else
+                // {
+                     //FULL_FILE_PATH_TO_SAVE = FILE_NAME;
+                // }
 
                  printf("Dest. final name is \"%s\" \n", FULL_FILE_PATH_TO_SAVE);
 
                  FILE *fp = fopen(FULL_FILE_PATH_TO_SAVE, "ab");
                  if (NULL == fp) {
-                     printf("Error opening file");
+                     printf("\nError opening file..%s\n",strerror(errno));
                      exit(1);
                  }
 
@@ -573,108 +481,5 @@ int main(int argc, char **argv) {
      }
 
 
-
-
-
-
 //-----------------HELPER METHODS----------------------
-void WriteToFile(char buffer[FILE_STORAGE_BUFFER_SIZE],char* filePath)
-{
-    FILE *fptr;
-    //char* filePath = "payload.txt";
-    fptr = fopen(filePath,"a+");
-    fprintf(fptr,"%s",buffer);
-    fclose(fptr);
-}
 
-char* ReadFile(char* fileAddress){
-
-    char *buffer;
-    FILE *fh = fopen(fileAddress, "rb");
-    if ( fh != NULL )
-    {
-        fseek(fh, 0L, SEEK_END);
-        long s = ftell(fh);
-        rewind(fh);
-        buffer = malloc(s);
-        if ( buffer != NULL )
-        {
-            fread(buffer, s, 1, fh);
-            // we can now close the file
-            fclose(fh); fh = NULL;
-
-            // do something, e.g.
-            //fwrite(buffer, s, 1, stdout);
-            //free(buffer);
-        }
-        if (fh != NULL) fclose(fh);
-    }
-
-    return buffer;
-}
-
-char *substring(size_t start, size_t stop, const char *src, size_t size)
-{
-    //char dst[size];
-    char* dst = malloc(size * sizeof(char));
-
-    int count = stop - start;
-    if ( count >= --size )
-    {
-        count = size;
-    }
-    sprintf(dst, "%.*s", count, src + start);
-    char* returnval = dst;
-    free(dst);
-    return returnval;
-}
-
-char *substringV2(char *string, int position, int length)
-{
-    char *pointer;
-    int c;
-
-    pointer = malloc(length+1);
-
-    if (pointer == NULL)
-    {
-        printf("Unable to allocate memory.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    for (c = 0 ; c < position -1 ; c++)
-        string++;
-
-    for (c = 0 ; c < length ; c++)
-    {
-        *(pointer+c) = *string;
-        string++;
-    }
-
-    *(pointer+c) = '\0';
-
-    return pointer;
-}
-
-
-
-
-size_t explode(const char *delim, const char *str, char **pointers_out, char *bytes_out)
-{
-    size_t  delim_length        = strlen(delim);
-    char   **pointers_out_start = pointers_out;
-    assert(delim_length > 0);
-    for (;;) {
-        const char *delim_pos = strstr(str, delim);
-        *pointers_out++ = bytes_out;
-        if (delim_pos == NULL) {
-            strcpy(bytes_out, str);
-            return pointers_out - pointers_out_start;
-        } else {
-            while (str < delim_pos)
-                *bytes_out++ = *str++;
-            *bytes_out++ = '\0';
-            str += delim_length;
-        }
-    }
-}
